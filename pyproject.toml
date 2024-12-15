@@ -4,7 +4,9 @@ version = "0.1.0"
 description = ""
 authors = ["graduation <graduation21072003@gmail.com>"]
 readme = "README.md"
-
+packages = [
+    { include = "agents" },
+]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -19,11 +21,19 @@ langchain-anthropic = "^0.2.0"
 langchain-openai = "^0.2.0"
 langchainhub = "^0.1.20"
 langchain-ollama = "^0.2.0"
+pypdf2 = "^3.0.1"
+psycopg2-binary = "^2.9.10"
+pgvector = "^0.3.6"
+langgraph-cli = "^0.1.61"
+build = "^1.2.2.post1"
+up = "^0.2.1"
+sqlalchemy = "1.4.46"
 
 
 [tool.poetry.group.dev.dependencies]
 langgraph-cli = "^0.1.35"
 langgraph-sdk = "^0.1.18"
+ipykernel = "^6.29.5"
 
 [build-system]
 requires = ["poetry-core"]
