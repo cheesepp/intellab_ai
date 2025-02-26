@@ -6,7 +6,7 @@ import re
 import warnings
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Annotated, Any
+from typing import Annotated, Any, List
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
@@ -18,6 +18,8 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph.state import CompiledStateGraph
 from langsmith import Client as LangsmithClient
+from psycopg_pool import AsyncConnectionPool
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from agents import DEFAULT_AGENT, get_agent, get_all_agent_info
 from core import settings
@@ -35,11 +37,14 @@ from service.utils import (
     convert_message_content_to_string,
     langchain_to_chat_message,
     remove_tool_calls,
+    store_chat_history,
+    store_title
 )
-
+from agents.global_chatbot import workflow
 from fpdf import FPDF
 from io import BytesIO
 import tempfile
+from core.database import collection
 
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 logger = logging.getLogger(__name__)
@@ -58,15 +63,38 @@ def verify_bearer(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
 
+# @asynccontextmanager
+# async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+#     # Construct agent with Sqlite checkpointer
+#     # TODO: It's probably dangerous to share the same checkpointer on multiple agents
+#     async with AsyncSqliteSaver.from_conn_string("checkpoints.db") as saver:
+#         agents = get_all_agent_info()
+#         for a in agents:
+#             agent = get_agent(a.key)
+#             agent.checkpointer = saver
+#         yield
+#     # context manager will clean up the AsyncSqliteSaver on exit
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Construct agent with Sqlite checkpointer
     # TODO: It's probably dangerous to share the same checkpointer on multiple agents
-    async with AsyncSqliteSaver.from_conn_string("checkpoints.db") as saver:
+    async with AsyncConnectionPool(
+        # Example configuration
+        conninfo=os.getenv("DB_CONNECTION_STRING"),
+        max_size=20,
+        kwargs={
+            "autocommit": True,
+            "prepare_threshold": 0,
+        },
+    ) as pool:
+        checkpointer = AsyncPostgresSaver(pool)
+        # NOTE: you need to call .setup() the first time you're using your checkpointer
+        await checkpointer.setup()
         agents = get_all_agent_info()
         for a in agents:
             agent = get_agent(a.key)
-            agent.checkpointer = saver
+            agent.checkpointer = checkpointer
         yield
     # context manager will clean up the AsyncSqliteSaver on exit
 
@@ -87,7 +115,7 @@ async def info() -> ServiceMetadata:
     )
 
 
-def _parse_input(user_input: UserInput) -> tuple[dict[str, Any], UUID]:
+def _parse_input(user_input: UserInput) -> tuple[dict[str, Any], UUID, UUID]:
     run_id = uuid4()
     thread_id = user_input.thread_id or str(uuid4())
     kwargs = {
@@ -96,7 +124,7 @@ def _parse_input(user_input: UserInput) -> tuple[dict[str, Any], UUID]:
             configurable={"thread_id": thread_id, "model": user_input.model}, run_id=run_id
         ),
     }
-    return kwargs, run_id
+    return kwargs, run_id, thread_id
 
 TEMP_PDF_DIR = tempfile.gettempdir()  # Use a system temporary directory
 
@@ -131,24 +159,44 @@ async def invoke(user_input: UserInput, agent_id: str = DEFAULT_AGENT) -> ChatMe
     is also attached to messages for recording feedback.
     """
     agent: CompiledStateGraph = get_agent(agent_id)
-    kwargs, run_id = _parse_input(user_input)
+       
+    kwargs, run_id, thread_id = _parse_input(user_input)
+    timestamp = datetime.now().isoformat()
+    if agent_id == "title_generator":
+        fake_thread_id = uuid4()
+        run_id = uuid4()
+        kwargs = {
+        "input": {"messages": [HumanMessage(content=user_input.message)]},
+        "config": RunnableConfig(
+            configurable={"thread_id": str(fake_thread_id), "model": user_input.model}, run_id=run_id
+        ),
+    }
     try:
         response = await agent.ainvoke(**kwargs)
+        print(response)
         output = langchain_to_chat_message(response["messages"][-1])
         output.run_id = str(run_id)
+        output.thread_id = str(thread_id)
+        if agent_id == "global_chatbot":
+            print("SOTRE CHAT")
+            await store_chat_history(user_input, output, thread_id, timestamp)
+        elif agent_id == "title_generator":
+            await store_title(user_input, output.content, thread_id)
         # Generate and store a PDF if agent_id is 'summarize-assistant'
-        if agent_id == "summarize-assistant":
+        elif agent_id == "summarize-assistant":
+            
             extract_values = extract_course_info(user_input.message)
             pdf_path = os.path.join(os.getcwd(), "summary.pdf")
             pdf = FPDF()
             pdf.add_page()
             pdf.set_font("Arial", size=12)
-            pdf.cell(200, 10, txt=f"{extract_values["course_name"]} Summary", ln=True, align='C')
+            pdf.cell(200, 10, txt=f'{extract_values["course_name"]} Summary', ln=True, align='C')
             pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d')}", ln=True, align='L')
             pdf.multi_cell(0, 10, txt=output.content)  # Add output content to the PDF
             print(f"Extract value {extract_values}")
             # Write PDF to file
             pdf.output(pdf_path)
+            
         return output
     except Exception as e:
         logger.error(f"An exception occurred: {e}")
@@ -292,6 +340,35 @@ def history(input: ChatHistoryInput) -> ChatHistory:
         logger.error(f"An exception occurred: {e}")
         raise HTTPException(status_code=500, detail="Unexpected error")
 
+# Function to convert MongoDB document to Python dict
+def conversation_serializer(conversation):
+    return {
+        "id": str(conversation["_id"]),
+        "user_id": conversation["user_id"],
+        "conversations": conversation["conversations"]
+    }
+
+@app.get("/conversation/{user_id}", response_model=dict)
+def get_conversation(user_id: str):
+    conversation = collection.find_one({"user_id": user_id})
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conversation_serializer(conversation)
+
+@app.get("/conversations/{user_id}/threads", response_model=dict)
+def get_all_thread_ids(user_id: str):
+    conversation = collection.find_one({"user_id": user_id}, {"_id": 0, "conversations": 1})
+    if not conversation or "conversations" not in conversation:
+        return {"code": 404, "status": "No conversations found for the user", "data": []}
+    threads = [{"thread_id": convo.get("thread_id"), "title": convo.get("title", "No title available")} for convo in conversation["conversations"] if "thread_id" in convo]
+    return {"code": 200, "status": "Success", "data": threads}
+
+@app.get("/conversations/{user_id}/thread/{thread_id}", response_model=dict)
+def get_conversation_by_user_and_thread(user_id: str, thread_id: str):
+    conversation = collection.find_one({"user_id": user_id, "conversations.thread_id": thread_id}, {"_id": 0, "conversations.$": 1})
+    if not conversation:
+        return {"code": 404, "status": "Thread not found for the given user", "data": {}}
+    return {"code": 200, "status": "Success", "data": conversation["conversations"][0]}
 
 @app.get("/health")
 async def health_check():

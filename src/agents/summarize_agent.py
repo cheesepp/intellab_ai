@@ -91,7 +91,7 @@ def run_query(course_id):
     query = f"SELECT lesson_name, content FROM lessons WHERE course_id = '{course_id}' LIMIT 3"
     return db.run(query)
 
-llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.0)
+# llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.0)
 # llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.0)
 
 # --- Utilites ---
@@ -165,8 +165,9 @@ def retrieve_existing(state: AgentState):
     return {"response": cleaned_string}
 
 # ---- generate node ----
-def generate(state: AgentState):
+def generate(state: AgentState, config: RunnableConfig):
     print("-------- GENERATE ---------")
+    llm = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     full_chain = (
         RunnablePassthrough.assign(
             schema=get_schema,
@@ -198,8 +199,9 @@ Give a binary score 'yes' or 'no', where 'yes' means that the answer is new summ
 CHECKING_PROMPT = ChatPromptTemplate.from_template(CHECKING_SYSTEM)
 
 # ---- retrieve existing summary CONDITIONAL node
-def retrieve_existing_summary(state: AgentState) -> Literal["finalize_response", "store_summary"]:
+def retrieve_existing_summary(state: AgentState, config: RunnableConfig) -> Literal["finalize_response", "store_summary"]:
     print("-------- Retrieve existing Summary ---------")
+    llm = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     query = f"""
         SELECT summary_content
         FROM course_summary

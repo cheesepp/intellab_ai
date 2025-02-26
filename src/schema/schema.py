@@ -3,7 +3,7 @@ from typing import Any, Literal, NotRequired
 from pydantic import BaseModel, Field, SerializeAsAny
 from typing_extensions import TypedDict
 
-from schema.models import AllModelEnum, AnthropicModelName, OpenAIModelName
+from schema.models import AllModelEnum, AnthropicModelName, OllamaModelName, OpenAIModelName
 
 
 class AgentInfo(BaseModel):
@@ -47,13 +47,18 @@ class UserInput(BaseModel):
     model: SerializeAsAny[AllModelEnum] | None = Field(
         title="Model",
         description="LLM Model to use for the agent.",
-        default=OpenAIModelName.GPT_4O_MINI,
-        examples=[OpenAIModelName.GPT_4O_MINI, AnthropicModelName.HAIKU_35],
+        default=OllamaModelName.LLAMA3_2,
+        examples=[OllamaModelName.LLAMA3_2, AnthropicModelName.HAIKU_35],
     )
     thread_id: str | None = Field(
         description="Thread ID to persist and continue a multi-turn conversation.",
         default=None,
         examples=["847c6285-8fc9-4560-a83f-4e6285809254"],
+    )
+    user_id: str | None = Field(
+        description="User id to get specific conversation for different users.",
+        default=None,
+        examples=["847c6285-8fc9-4560-a83f-4e6285809254"]
     )
 
 
@@ -110,6 +115,10 @@ class ChatMessage(BaseModel):
     custom_data: dict[str, Any] = Field(
         description="Custom message data.",
         default={},
+    )
+    thread_id: str | None = Field(
+        default=None,
+        description="ID of conversation"
     )
 
     def pretty_repr(self) -> str:

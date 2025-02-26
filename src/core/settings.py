@@ -12,6 +12,7 @@ from schema.models import (
     GoogleModelName,
     GroqModelName,
     OpenAIModelName,
+    OllamaModelName,
     Provider,
 )
 

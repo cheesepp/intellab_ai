@@ -9,7 +9,15 @@ class Provider(StrEnum):
     GROQ = auto()
     AWS = auto()
     FAKE = auto()
+    Ollama = auto()
 
+class OllamaModelName(StrEnum):
+    "These models work when you already installed on local machine"
+    
+    LLAMA3_2 = "llama3.2"
+    CODESTRAL = "codestral"
+    CODEQWEN = "codeqwen"
+    MISTRAL = "mistral"
 
 class OpenAIModelName(StrEnum):
     """https://platform.openai.com/docs/models/gpt-4o"""
@@ -60,4 +68,5 @@ AllModelEnum: TypeAlias = (
     | GroqModelName
     | AWSModelName
     | FakeModelName
+    | OllamaModelName
 )

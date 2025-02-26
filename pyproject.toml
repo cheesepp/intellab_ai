@@ -42,6 +42,9 @@ dependencies = [
     "psycopg2>=2.9.10",
     "fpdf>=1.7.2",
     "langchain-ollama>=0.2.1",
+    "langgraph-checkpoint-postgres>=2.0.15",
+    "langchain-postgres>=0.0.13",
+    "pymongo[srv]==3.11",
 ]
 
 [dependency-groups]

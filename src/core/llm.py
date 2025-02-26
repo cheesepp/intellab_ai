@@ -1,4 +1,5 @@
 from functools import cache
+import os
 from typing import TypeAlias
 
 from langchain_anthropic import ChatAnthropic
@@ -7,6 +8,7 @@ from langchain_community.chat_models import FakeListChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 
 from schema.models import (
     AllModelEnum,
@@ -16,9 +18,14 @@ from schema.models import (
     GoogleModelName,
     GroqModelName,
     OpenAIModelName,
+    OllamaModelName
 )
 
 _MODEL_TABLE = {
+    OllamaModelName.LLAMA3_2: "llama3.2",
+    OllamaModelName.CODESTRAL: "codestral",
+    OllamaModelName.CODEQWEN: "codeqwen",
+    OllamaModelName.MISTRAL: "mistral",
     OpenAIModelName.GPT_4O_MINI: "gpt-4o-mini",
     OpenAIModelName.GPT_4O: "gpt-4o",
     AnthropicModelName.HAIKU_3: "claude-3-haiku-20240307",
@@ -43,6 +50,8 @@ def get_model(model_name: AllModelEnum, /) -> ModelT:
     if not api_model_name:
         raise ValueError(f"Unsupported model: {model_name}")
 
+    if model_name in OllamaModelName:
+        return ChatOllama(model=model_name, streaming=True, base_url=os.getenv("OLLAMA_HOST"))
     if model_name in OpenAIModelName:
         return ChatOpenAI(model=api_model_name, temperature=0.5, streaming=True)
     if model_name in AnthropicModelName:
