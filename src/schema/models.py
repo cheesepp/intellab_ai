@@ -15,6 +15,7 @@ class OllamaModelName(StrEnum):
     "These models work when you already installed on local machine"
     
     LLAMA3_2 = "llama3.2"
+    LLAMA3 = "llama3"
     CODESTRAL = "codestral"
     CODEQWEN = "codeqwen"
     MISTRAL = "mistral"

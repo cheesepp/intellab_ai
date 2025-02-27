@@ -23,6 +23,7 @@ from schema.models import (
 
 _MODEL_TABLE = {
     OllamaModelName.LLAMA3_2: "llama3.2",
+    OllamaModelName.LLAMA3: "llama3",
     OllamaModelName.CODESTRAL: "codestral",
     OllamaModelName.CODEQWEN: "codeqwen",
     OllamaModelName.MISTRAL: "mistral",

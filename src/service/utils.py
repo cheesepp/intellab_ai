@@ -46,7 +46,7 @@ def langchain_to_chat_message(message: BaseMessage) -> ChatMessage:
             if message.tool_calls:
                 ai_message.tool_calls = message.tool_calls
             if message.response_metadata:
-                ai_message.response_metadata = message.response_metadata
+                ai_message.metadata = message.response_metadata
             return ai_message
         case ToolMessage():
             tool_message = ChatMessage(
@@ -86,14 +86,14 @@ async def store_chat_history(user_input: UserInput, ai_output: ChatMessage, thre
     human_message = user_input.message
     ai_message = ai_output.content
     if user_id:
-        print(f'CONTAIN USER ID {ai_output.response_metadata}')
+        print(f'CONTAIN USER ID {ai_output.metadata}')
         # Create message entries
-        user_entry = {"role": "user", "content": human_message, "timestamp": timestamp}
+        user_entry = {"type": "user", "content": human_message, "timestamp": timestamp}
         ai_entry = {
-            "role": "ai",
+            "type": "ai",
             "content": ai_message,
-            "metadata": {'model': ai_output.response_metadata["model"]},
-            "timestamp": ai_output.response_metadata["created_at"]
+            "metadata": {'model': ai_output.metadata["model"]},
+            "timestamp": ai_output.metadata["created_at"]
         }
         # Check if the user exists
         user_data = collection.find_one({"user_id": user_id})

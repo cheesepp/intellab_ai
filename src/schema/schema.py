@@ -108,7 +108,7 @@ class ChatMessage(BaseModel):
         default=None,
         examples=["847c6285-8fc9-4560-a83f-4e6285809254"],
     )
-    response_metadata: dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         description="Response metadata. For example: response headers, logprobs, token counts.",
         default={},
     )

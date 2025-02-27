@@ -360,7 +360,7 @@ def get_all_thread_ids(user_id: str):
     conversation = collection.find_one({"user_id": user_id}, {"_id": 0, "conversations": 1})
     if not conversation or "conversations" not in conversation:
         return {"code": 404, "status": "No conversations found for the user", "data": []}
-    threads = [{"thread_id": convo.get("thread_id"), "title": convo.get("title", "No title available")} for convo in conversation["conversations"] if "thread_id" in convo]
+    threads = [{"thread_id": convo.get("thread_id"), "title": convo.get("title", "No title available"), "timestamp": convo.get("timestamp")} for convo in conversation["conversations"] if "thread_id" in convo]
     return {"code": 200, "status": "Success", "data": threads}
 
 @app.get("/conversations/{user_id}/thread/{thread_id}", response_model=dict)
