@@ -3,32 +3,23 @@ from langchain.indexes import VectorstoreIndexCreator
 from langchain.chains.retrieval import create_retrieval_chain
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 import os
-from langchain import hub
 from langchain_core.runnables import (
     RunnableLambda,
     RunnableConfig,
-    RunnablePassthrough,
 )
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_groq import ChatGroq
 from typing import Literal, Annotated, TypedDict
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, RemoveMessage
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import MessagesState, StateGraph, START, END, add_messages
+from langgraph.graph import StateGraph, START, END, add_messages
 from langchain_core.messages import (
     AnyMessage,
 )
 from langchain_ollama import OllamaEmbeddings
-from langchain_ollama import OllamaEmbeddings, ChatOllama
-from psycopg_pool import ConnectionPool
-from psycopg_pool import AsyncConnectionPool
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from langgraph.checkpoint.postgres import PostgresSaver
-from langchain_postgres import (PostgresChatMessageHistory)
+from langchain_ollama import OllamaEmbeddings
 from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, SystemMessage
 
+from agents.llama_guard import LlamaGuard, LlamaGuardOutput, SafetyAssessment
 from core import settings
 from core.llm import get_model
 
@@ -55,11 +46,11 @@ Answer questions based on conversation history:
 Summary: {summary}
 Current conversation: {conversation}
 
-When you recommend some courses, please give the url which point to that course with endpoint is course_id and appended with "https://localhost:3000/courses/" (just when recommending).
-
+When you recommend some courses, always give the url along which point to that course with endpoint is course_id and appended with "https://localhost:3000/courses/" (just when recommending).
+Please follow strictly with the provided context, do not recommend any courses outside.
 Question: {question} 
 Context: {context} 
-Answer:"""
+Answer: Just response the question, do not say 'Based on' or something similar."""
 
 loader = CSVLoader(file_path='./researchs/courses.csv')
 embeddings = OllamaEmbeddings(
@@ -71,7 +62,7 @@ docsearch = index_creator.from_loaders([loader])
 prompt = ChatPromptTemplate.from_template(template)
 
 # Define the logic to call the model
-def call_model(state: State, config: RunnableConfig):
+async def acall_model(state: State, config: RunnableConfig):
     print(f'------- CALL MODEL {config["configurable"].get("model", settings.DEFAULT_MODEL)}----------')
     model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     # If a summary exists, we add this in as a system message
@@ -97,7 +88,7 @@ def call_model(state: State, config: RunnableConfig):
     )
     
     # print(f"------- doc search {docsearch.vectorstore.as_retriever()} ----------")
-    response = qa_chain.invoke(messages[-1].content)
+    response = await qa_chain.ainvoke(messages[-1].content)
     # response = model.invoke(messages)
     # We return a list, because this will get added to the existing list
     return {"messages": [response], "original_messages": state["messages"] + [response]}
@@ -113,7 +104,7 @@ def should_continue(state: State) -> Literal["summarize_conversation", END]:
     return END
 
 
-def summarize_conversation(state: State, config: RunnableConfig):
+async def summarize_conversation(state: State, config: RunnableConfig):
     print(f"------- SUMMARIZE CONVERSATION ----------")
     model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     # First, we summarize the conversation
@@ -130,23 +121,55 @@ def summarize_conversation(state: State, config: RunnableConfig):
 
     original_messages = state["messages"]
     summary_messages = state["messages"] + [HumanMessage(content=summary_message)]
-    response = model.invoke(summary_messages)
+    response = await model.ainvoke(summary_messages)
     # We now need to delete messages that we no longer want to show up
     # I will delete all but the last two messages, but you can change this
     delete_messages = [RemoveMessage(id=m.id) for m in state["messages"][:-2]]
     return {"summary": response.content, "original_messages": original_messages, "messages": delete_messages}
+
+def format_safety_message(safety: LlamaGuardOutput) -> AIMessage:
+    content = (
+        f"This conversation was flagged for unsafe content: {', '.join(safety.unsafe_categories)}"
+    )
+    return AIMessage(content=content)
+
+async def llama_guard_input(state: State, config: RunnableConfig) -> State:
+    llama_guard = LlamaGuard()
+    safety_output = await llama_guard.ainvoke("User", state["messages"])
+    return {"safety": safety_output}
+
+
+async def block_unsafe_content(state: State, config: RunnableConfig) -> State:
+    safety: LlamaGuardOutput = state["safety"]
+    return {"messages": [format_safety_message(safety)]}
+
+
+
+
+# Check for unsafe input and block further processing if found
+def check_safety(state: State) -> Literal["unsafe", "safe"]:
+    safety: LlamaGuardOutput = state["safety"]
+    match safety.safety_assessment:
+        case SafetyAssessment.UNSAFE:
+            return "unsafe"
+        case _:
+            return "safe"
 
 
 # Define a new graph
 workflow = StateGraph(State)
 
 # Define the conversation node and the summarize node
-workflow.add_node("conversation", call_model)
+workflow.add_node("conversation", acall_model)
 # workflow.add_node("normal_conversation", normal_conversation)
 workflow.add_node(summarize_conversation)
+workflow.add_node("guard_input", llama_guard_input)
+workflow.add_node("block_unsafe_content", block_unsafe_content)
 
 # Set the entrypoint as conversation
-workflow.add_edge(START, "conversation")
+workflow.set_entry_point("guard_input")
+
+workflow.add_edge("guard_input", "conversation")
 
 # We now add a conditional edge
 workflow.add_conditional_edges(
@@ -157,14 +180,14 @@ workflow.add_conditional_edges(
     should_continue,
 )
 
+workflow.add_conditional_edges(
+    "guard_input", check_safety, {"unsafe": "block_unsafe_content", "safe": "conversation"}
+)
+
 # We now add a normal edge from `summarize_conversation` to END.
 # This means that after `summarize_conversation` is called, we end.
 workflow.add_edge("summarize_conversation", END)
+# Always END after blocking unsafe content
+workflow.add_edge("block_unsafe_content", END)
 
-# # Initialize the asynchronous connection pool
-# pool = ConnectionPool(conninfo=DB_CONNECTION_STRING)
-
-# # Initialize the AsyncPostgresSaver with the connection pool
-# checkpointer = PostgresSaver(pool)
-# checkpointer.setup()
 global_chatbot = workflow.compile()
