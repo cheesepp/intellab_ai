@@ -45,6 +45,8 @@ dependencies = [
     "langgraph-checkpoint-postgres>=2.0.15",
     "langchain-postgres>=0.0.13",
     "pymongo[srv]==3.11",
+    "jq>=1.8.0",
+    "lark>=1.2.2",
 ]
 
 [dependency-groups]

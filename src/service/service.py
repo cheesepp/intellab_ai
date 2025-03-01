@@ -178,7 +178,7 @@ async def invoke(user_input: UserInput, agent_id: str = DEFAULT_AGENT) -> ChatMe
         output.run_id = str(run_id)
         output.thread_id = str(thread_id)
         if agent_id == "global_chatbot":
-            print("SOTRE CHAT")
+            print("STORE CHAT")
             await store_chat_history(user_input, output, thread_id, timestamp)
         elif agent_id == "title_generator":
             await store_title(user_input, output.content, thread_id)
@@ -212,13 +212,27 @@ async def message_generator(
     This is the workhorse method for the /stream endpoint.
     """
     agent: CompiledStateGraph = get_agent(agent_id)
-    kwargs, run_id = _parse_input(user_input)
-
+    kwargs, run_id, thread_id = _parse_input(user_input)
+    timestamp = datetime.now().isoformat()
+    if agent_id == "title_generator":
+        fake_thread_id = uuid4()
+        run_id = uuid4()
+        kwargs = {
+        "input": {"messages": [HumanMessage(content=user_input.message)]},
+        "config": RunnableConfig(
+            configurable={"thread_id": str(fake_thread_id), "model": user_input.model}, run_id=run_id
+        ),
+    }
     # Process streamed events from the graph and yield messages over the SSE stream.
     async for event in agent.astream_events(**kwargs, version="v2"):
         if not event:
             continue
-
+        # Check if event["metadata"] is a string and convert it to a dictionary
+        metadata_dict = event["metadata"]
+        # print("================ DATA ===============")
+        # print(event["data"])
+        if "langgraph_node" in metadata_dict and metadata_dict["langgraph_node"] == "summarize_conversation":
+            continue
         new_messages = []
         # Yield messages written to the graph state after node execution finishes.
         if (
@@ -229,7 +243,6 @@ async def message_generator(
             and "messages" in event["data"]["output"]
         ):
             new_messages = event["data"]["output"]["messages"]
-
         # Also yield intermediate messages from agents.utils.CustomData.adispatch().
         if event["event"] == "on_custom_event" and "custom_data_dispatch" in event.get("tags", []):
             new_messages = [event["data"]]
@@ -238,6 +251,7 @@ async def message_generator(
             try:
                 chat_message = langchain_to_chat_message(message)
                 chat_message.run_id = str(run_id)
+                chat_message.thread_id = str(thread_id)
             except Exception as e:
                 logger.error(f"Error parsing message: {e}")
                 yield f"data: {json.dumps({'type': 'error', 'content': 'Unexpected error'})}\n\n"
@@ -245,6 +259,25 @@ async def message_generator(
             # LangGraph re-sends the input message, which feels weird, so drop it
             if chat_message.type == "human" and chat_message.content == user_input.message:
                 continue
+            if agent_id == "global_chatbot":
+                print("STORE CHAT")
+                await store_chat_history(user_input, chat_message, thread_id, timestamp)
+            elif agent_id == "title_generator":
+                await store_title(user_input, chat_message.content, thread_id)
+            elif agent_id == "summarize-assistant":
+            
+                extract_values = extract_course_info(user_input.message)
+                pdf_path = os.path.join(os.getcwd(), "summary.pdf")
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font("Arial", size=12)
+                pdf.cell(200, 10, txt=f'{extract_values["course_name"]} Summary', ln=True, align='C')
+                pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d')}", ln=True, align='L')
+                pdf.multi_cell(0, 10, txt=chat_message.content)  # Add output content to the PDF
+                print(f"Extract value {extract_values}")
+                # Write PDF to file
+                pdf.output(pdf_path)
+            print(message)
             yield f"data: {json.dumps({'type': 'message', 'content': chat_message.model_dump()})}\n\n"
 
         # Yield tokens streamed from LLMs.

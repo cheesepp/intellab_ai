@@ -16,7 +16,7 @@ def call_model(state: MessagesState, config: RunnableConfig):
     Just return the title, do not say anything."""
     summary_title_prompt = ChatPromptTemplate.from_template(template)
     model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    title_assistant = summary_title_prompt | model | StrOutputParser()
+    title_assistant = summary_title_prompt | model
     summary_response = title_assistant.invoke({"human_message": messages[-1].content})
     return {"messages": [summary_response]}
 
