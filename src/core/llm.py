@@ -27,6 +27,8 @@ _MODEL_TABLE = {
     OllamaModelName.CODESTRAL: "codestral",
     OllamaModelName.CODEQWEN: "codeqwen",
     OllamaModelName.MISTRAL: "mistral",
+    OllamaModelName.DEEPSEEK_R1_1_5B: "deepseek-r1:1.5b",
+    OllamaModelName.DEEPSEEK_R1_8B: "deepseek-r1:8b",
     OpenAIModelName.GPT_4O_MINI: "gpt-4o-mini",
     OpenAIModelName.GPT_4O: "gpt-4o",
     AnthropicModelName.HAIKU_3: "claude-3-haiku-20240307",

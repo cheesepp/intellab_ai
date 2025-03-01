@@ -36,7 +36,7 @@ class State(TypedDict):
     original_messages: Annotated[list[AnyMessage], add_messages]
     messages: Annotated[list[AnyMessage], add_messages]
     summary: str
-
+    safety: LlamaGuardOutput
 
 # We will use this model for both the conversation and the summarization
 # model = ChatOllama(model="llama3.2")
