@@ -1,5 +1,6 @@
 from datetime import datetime
 import json
+import re
 from fastapi import HTTPException
 from langchain_core.messages import (
     AIMessage,
@@ -11,11 +12,44 @@ from langchain_core.messages import (
     ChatMessage as LangchainChatMessage,
 )
 
+from langchain_core.runnables import RunnableConfig
 from schema import ChatMessage
 from schema.schema import UserInput
 from core.database import collection
 from uuid import UUID, uuid4
+from typing import Annotated, Any, List
 
+def _parse_input(user_input: UserInput) -> tuple[dict[str, Any], UUID, UUID]:
+    run_id = uuid4()
+    thread_id = user_input.thread_id or str(uuid4())
+    kwargs = {
+        "input": {"messages": [HumanMessage(content=user_input.message)]},
+        "config": RunnableConfig(
+            configurable={"thread_id": thread_id, "model": user_input.model}, run_id=run_id
+        ),
+    }
+    return kwargs, run_id, thread_id
+
+def extract_course_info(input_string):
+    # Regular expression to match the course name, ID, and regenerate flag
+    pattern = r"course name: (.*?), id: (.*?), regenerate: (true|false)"
+    
+    # Search the string for matches
+    match = re.search(pattern, input_string, re.IGNORECASE)
+    
+    if match:
+        # Extracted groups
+        course_name = match.group(1)
+        course_id = match.group(2)
+        regenerate = match.group(3).lower() == 'true'  # Convert to boolean
+        return {
+            "course_name": course_name,
+            "course_id": course_id,
+            "regenerate": regenerate
+        }
+    else:
+        raise ValueError("Input string does not match the expected format.")
+    
 def convert_message_content_to_string(content: str | list[str | dict]) -> str:
     if isinstance(content, str):
         return content

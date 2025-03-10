@@ -2,7 +2,7 @@ import uuid
 import requests
 
 # Define the URL
-url = "http://localhost:8006/problem_chatbot/invoke"
+url = "http://localhost:8006/ai/invoke/problem_chatbot"
 
 # Read the problem from the problem.md file
 with open('/Users/mac/HCMUS/datn/agent-service-toolkit/src/researchs/problem_chatbot/problem.md', 'r') as file:

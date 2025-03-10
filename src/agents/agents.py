@@ -24,16 +24,16 @@ agents: dict[str, Agent] = {
     "global_chatbot": Agent(description="A chatbot used in the entire website.", graph=global_chatbot),
     "problem_chatbot": Agent(description="A chatbot used for problem-solving.", graph=problem_chatbot),
     "chatbot": Agent(description="A simple chatbot.", graph=chatbot),
-    "research-assistant": Agent(
+    "research_assistant": Agent(
         description="A research assistant with web search and calculator.", graph=research_assistant
     ),
-    "summarize-assistant": Agent(
+    "summarize_assistant": Agent(
         description="A summarize assistant by retrieval data from database.", graph=summarize_assistant
     ),
     "title_generator": Agent(
         description="A summary title assistant from human message.", graph=title_generator
     ),
-    "bg-task-agent": Agent(description="A background task agent.", graph=bg_task_agent),
+    "bg_task_agent": Agent(description="A background task agent.", graph=bg_task_agent),
 }
 
 
