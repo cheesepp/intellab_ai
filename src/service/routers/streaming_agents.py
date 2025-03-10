@@ -7,7 +7,7 @@ import warnings
 from collections.abc import AsyncGenerator
 from typing import Any
 from uuid import uuid4
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from langchain_core._api import LangChainBetaWarning
 from langchain_core.messages import AnyMessage, HumanMessage
@@ -26,7 +26,9 @@ from service.utils import (
     langchain_to_chat_message,
     remove_tool_calls,
     store_chat_history,
-    store_title
+    store_problem_chat_history,
+    store_title,
+    store_problem_title
 )
 from agents.global_chatbot import workflow
 from fpdf import FPDF
@@ -96,9 +98,16 @@ async def message_generator(
             if agent_id == "global_chatbot":
                 print("STORE CHAT")
                 await store_chat_history(user_input, chat_message, thread_id, timestamp)
+            if agent_id == "problem_chatbot":
+                print("STORE PROBLEM CHAT")
+                await store_problem_chat_history(user_input, chat_message, thread_id, timestamp)
             elif agent_id == "title_generator":
-                await store_title(user_input, chat_message.content, thread_id)
-            elif agent_id == "summarize-assistant":
+                if user_input.problem_title == "1":
+                    await store_problem_title(user_input, chat_message.content, thread_id)
+                else:
+                    await store_title(user_input, chat_message.content, thread_id)
+                    
+            elif agent_id == "summarize_assistant":
             
                 extract_values = extract_course_info(user_input.message)
                 pdf_path = os.path.join(os.getcwd(), "summary.pdf")
@@ -169,7 +178,7 @@ router = APIRouter(prefix="/stream")
              Request format:
              
              {
-                message: "Problem: <problem> Question: <question>"
+                message: "Problem: <problem> Problem_id: <problem_id> Question: <question>"
                 user_id:
                 thread_id:
                 model: 
@@ -186,6 +195,11 @@ router = APIRouter(prefix="/stream")
                 user_id:
                 thread_id:
                 model: 
+             }
+             if it used to generate title for conversation in problem, please add these params:
+             {
+                 "problem_title": "1",
+                 "problem_id": "123" 
              }
              """)
 @router.post("/invoke",  tags=["Invoke Default Agent"], 
@@ -204,7 +218,7 @@ router = APIRouter(prefix="/stream")
 #     tags=["Streaming Agents"]
 # )
 # @router.post("/stream", response_class=StreamingResponse, responses=_sse_response_example())
-async def stream(user_input: StreamInput, agent_id: str = DEFAULT_AGENT) -> StreamingResponse:
+async def stream(request: Request, user_input: StreamInput) -> StreamingResponse:
     """
     Stream an agent's response to a user input, including intermediate messages and tokens.
 
@@ -214,7 +228,9 @@ async def stream(user_input: StreamInput, agent_id: str = DEFAULT_AGENT) -> Stre
 
     Set `stream_tokens=false` to return intermediate messages but not token-by-token.
     """
-    
+    agent_id = request.url.path.split("/")[-1]  
+    if (agent_id == "invoke"):
+        agent_id = DEFAULT_AGENT
     return StreamingResponse(
         message_generator(user_input, agent_id),
         media_type="text/event-stream",

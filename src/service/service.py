@@ -45,8 +45,6 @@ from agents.global_chatbot import workflow
 from fpdf import FPDF
 from io import BytesIO
 import tempfile
-from core.database import collection
-
 
 from .routers.history import router as history_router
 from .routers.streaming_agents import router as streaming_router

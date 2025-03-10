@@ -15,7 +15,7 @@ from langchain_core.messages import (
 from langchain_core.runnables import RunnableConfig
 from schema import ChatMessage
 from schema.schema import UserInput
-from core.database import collection
+from core.database import global_chatbot_collection, problem_chatbot_collection
 from uuid import UUID, uuid4
 from typing import Annotated, Any, List
 
@@ -131,18 +131,18 @@ async def store_chat_history(user_input: UserInput, ai_output: ChatMessage, thre
             "timestamp": ai_timestamp
         }
         # Check if the user exists
-        user_data = collection.find_one({"user_id": user_id})
+        user_data = global_chatbot_collection.find_one({"user_id": user_id})
         if user_data:
             if thread_id:
                 print("CONTAIN conversation_id")
                 # Check if conversation exists
-                conversation = collection.find_one(
+                conversation = global_chatbot_collection.find_one(
                     {"user_id": user_id, "conversations.thread_id": thread_id}
                 )
                 
                 if conversation:
                     # Append new messages to the existing conversation
-                    collection.update_one(
+                    global_chatbot_collection.update_one(
                         {"user_id": user_id, "conversations.thread_id": thread_id},
                         {"$push": {"conversations.$.messages": {"$each": [user_entry, ai_entry]}}}
                     )
@@ -157,7 +157,7 @@ async def store_chat_history(user_input: UserInput, ai_output: ChatMessage, thre
                         "messages": [user_entry, ai_entry]
                     }
 
-                    collection.update_one(
+                    global_chatbot_collection.update_one(
                         {"user_id": user_id},
                         {"$push": {"conversations": new_conversation}},
                         upsert=True
@@ -181,33 +181,165 @@ async def store_chat_history(user_input: UserInput, ai_output: ChatMessage, thre
                 ]
             }
 
-            collection.insert_one(new_user)
+            global_chatbot_collection.insert_one(new_user)
             print({"message": "New user created and conversation started", "thread_id": thread_id})
         
     else:
         raise HTTPException(status_code=400, detail="Invalid user id!")
 
+def extract_message(message):
+        print (f"========= {message} ============")
+        pattern = r"Problem:\s*(.*?)\s*Problem_id:\s*(\S+)\s*Question:\s*(.+)"
+
+        match = re.search(pattern, message, re.DOTALL)
+        print (f"========= {match} ============")
+        if match:
+            problem_content = match.group(1)
+            problem_id = match.group(2)
+            question = match.group(3)
+            print("Problem Content:", problem_content)
+            print("Problem ID:", problem_id)
+            print("Question:", question)
+            return {"problem": problem_content, "problem_id": problem_id, "question": question}
+        else:
+            return {"problem": "", "problem_id": "", "question": ""}
+        
+async def store_problem_chat_history(user_input: UserInput, ai_output: ChatMessage, thread_id: UUID, timestamp: str):
+    
+    user_id = user_input.user_id
+    thread_id = thread_id
+    extracted_message = extract_message(user_input.message)
+    human_message = extracted_message["question"]
+    problem_id = extracted_message["problem_id"]
+    
+    ai_message = ai_output.content
+    ai_timestamp = datetime.now().isoformat()
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid user id!")
+
+    print(f'CONTAIN USER ID {ai_output.metadata}')
+
+    user_entry = {"type": "user", "content": human_message, "timestamp": timestamp}
+    ai_entry = {
+        "type": "ai",
+        "content": ai_message,
+        "metadata": {'model': user_input.model},
+        "timestamp": ai_timestamp
+    }
+
+    user_data = problem_chatbot_collection.find_one({"user_id": user_id})
+
+    if user_data:
+        if thread_id:
+            print("CONTAIN conversation_id")
+
+            conversation = problem_chatbot_collection.find_one(
+                {"user_id": user_id, "conversations.thread_id": thread_id, "conversations.problem_id": problem_id}
+            )
+
+            if conversation:
+                problem_chatbot_collection.update_one(
+                    {"user_id": user_id, "conversations.thread_id": thread_id, "conversations.problem_id": problem_id},
+                    {"$push": {"conversations.$.messages": {"$each": [user_entry, ai_entry]}}}
+                )
+                print({"message": "Conversation updated", "thread_id": thread_id})
+            else:
+                print("GENERATE NEW CONVERSATION")
+                
+                # **Find all conversations with the same problem_id**
+                problem_conversations = [
+                    convo for convo in user_data["conversations"] if convo["problem_id"] == problem_id
+                ]
+
+                if len(problem_conversations) >= 3:
+                    # **Find and remove the oldest conversation**
+                    oldest_conversation = min(problem_conversations, key=lambda c: c["timestamp"])
+                    problem_chatbot_collection.update_one(
+                        {"user_id": user_id},
+                        {"$pull": {"conversations": {"thread_id": oldest_conversation["thread_id"]}}}
+                    )
+                    print({"message": "Oldest conversation removed", "removed_thread_id": oldest_conversation["thread_id"]})
+
+                # **Add the new conversation**
+                new_conversation = {
+                    "thread_id": thread_id,
+                    "problem_id": problem_id,
+                    "timestamp": timestamp,
+                    "messages": [user_entry, ai_entry]
+                }
+
+                problem_chatbot_collection.update_one(
+                    {"user_id": user_id},
+                    {"$push": {"conversations": new_conversation}},
+                    upsert=True
+                )
+                print({"message": "New conversation created", "thread_id": thread_id})   
+        else:
+            raise HTTPException(status_code=500, detail="Internal Server Error")
+
+    else:
+        print("ADD NEW USER TO DATABASE")
+        
+        new_user = {
+            "user_id": user_id,
+            "conversations": [
+                {
+                    "thread_id": thread_id,
+                    "problem_id": problem_id,
+                    "timestamp": timestamp,
+                    "messages": [user_entry, ai_entry]
+                }
+            ]
+        }
+
+        problem_chatbot_collection.insert_one(new_user)
+        print({"message": "New user created and conversation started", "thread_id": thread_id, "problem_id": problem_id})
+
 async def store_title(user_input: UserInput, output: str, thread_id: str):
     user_id = user_input.user_id
     thread_id = thread_id
-    conversation = collection.find_one({"user_id": user_id, "conversations.thread_id": thread_id})
+    conversation = global_chatbot_collection.find_one({"user_id": user_id, "conversations.thread_id": thread_id})
     if not user_id or not thread_id:
         raise HTTPException(status_code=400, detail="User ID and thread ID are required")
 
     # Check if conversation exists
-    conversation = collection.find_one(
+    conversation = global_chatbot_collection.find_one(
         {"user_id": user_id, "conversations.thread_id": thread_id}
     )
 
     if conversation:
         # Update the specific conversation within the conversations array
-        collection.update_one(
+        global_chatbot_collection.update_one(
             {"user_id": user_id, "conversations.thread_id": thread_id},
             {"$set": {"conversations.$.title": output}}
         )
         print({"message": "Summary title added successfully", "thread_id": thread_id})
         return
     raise HTTPException(status_code=404, detail="Conversation not found")
+
+async def store_problem_title(user_input: UserInput, output: str, thread_id: str):
+    problem_id = user_input.problem_id
+    user_id = user_input.user_id
+
+    if not user_id or not thread_id or not problem_id:
+        raise HTTPException(status_code=400, detail="User ID, thread ID, and problem ID are required")
+
+    # Check if the conversation exists for the given user, thread, and problem_id
+    conversation = problem_chatbot_collection.find_one(
+        {"user_id": user_id, "conversations": {"$elemMatch": {"thread_id": thread_id, "problem_id": problem_id}}}
+    )
+
+    if conversation:
+        # Update the specific conversation's title within the conversations array
+        problem_chatbot_collection.update_one(
+            {"user_id": user_id, "conversations.thread_id": thread_id, "conversations.problem_id": problem_id},
+            {"$set": {"conversations.$.title": output}}
+        )
+        print({"message": "Summary title added successfully", "thread_id": thread_id, "problem_id": problem_id})
+        return
+
+    raise HTTPException(status_code=404, detail="Conversation not found for the given problem_id")
+
         
         
     

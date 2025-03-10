@@ -145,21 +145,22 @@ async def reviewer(state: AgentState, config: RunnableConfig):
   return {"messages": [response]}
   
 def extract_message(state: AgentState):
-  message = state["messages"][-1].content
-  print (f"========= {message} ============")
-  pattern = r"Problem:\s*(.*?)\s*Question:\s*(.+)"
+    message = state["messages"][-1].content
+    print (f"========= GO {message} ============")
+    pattern = r"Problem:\s*(.*?)\s*Problem_id:\s*(\S+)\s*Question:\s*(.+)"
 
-  match = re.search(pattern, message, re.DOTALL)
-  print (f"========= {match} ============")
-
-  if match:
-      problem = match.group(1)
-      question = match.group(2)
-      print("Problem:", problem)
-      print("Question:", question)
-      return {"problem": problem, "question": question}
-  else:
-      return {"problem": "", "question": ""}
+    match = re.search(pattern, message, re.DOTALL)
+    print (f"========= MATCH {match} ============")
+    if match:
+        problem_content = match.group(1)
+        problem_id = match.group(2)
+        question = match.group(3)
+        print("Problem Content:", problem_content)
+        print("Problem ID:", problem_id)
+        print("Question:", question)
+        return {"problem": problem_content, "question": question}
+    else:
+        return {"problem": "", "question": ""}
    
 async def acall_model(state: AgentState, config: RunnableConfig):
     problem = state["problem"]

@@ -40,13 +40,11 @@ from service.utils import (
     langchain_to_chat_message,
     remove_tool_calls,
     store_chat_history,
+    store_problem_chat_history,
+    store_problem_title,
     store_title
 )
-from agents.global_chatbot import workflow
 from fpdf import FPDF
-from io import BytesIO
-import tempfile
-from core.database import collection
 
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 logger = logging.getLogger(__name__)
@@ -73,7 +71,7 @@ router = APIRouter(prefix="/invoke")
              Request format:
              
              {
-                message: "Problem: <problem> Question: <question>"
+                message: "Problem: <problem> Problem_id: <problem_id> Question: <question>"
                 user_id:
                 thread_id:
                 model: 
@@ -89,6 +87,11 @@ router = APIRouter(prefix="/invoke")
                 user_id:
                 thread_id:
                 model: 
+             }
+             if it used to generate title for conversation in problem, please add these params:
+             {
+                 "problem_title": "1",
+                 "problem_id": "123" 
              }
              """)
 @router.post("/invoke",  tags=["Invoke Default Agent"], 
@@ -126,8 +129,14 @@ async def invoke(request: Request, user_input: UserInput) -> ChatMessage:
         if agent_id == "global_chatbot":
             print("STORE CHAT")
             await store_chat_history(user_input, output, thread_id, timestamp)
+        if agent_id == "problem_chatbot":
+            print("STORE PROBLEM CHAT")
+            await store_problem_chat_history(user_input, output, thread_id, timestamp)
         elif agent_id == "title_generator":
-            await store_title(user_input, output.content, thread_id)
+            if user_input.problem_title == "1":
+                await store_problem_title(user_input, output.content, thread_id)
+            else:
+                await store_title(user_input, output.content, thread_id)
         # Generate and store a PDF if agent_id is 'summarize-assistant'
         elif agent_id == "summarize_assistant":
             

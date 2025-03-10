@@ -10,9 +10,10 @@ with open('/Users/mac/HCMUS/datn/agent-service-toolkit/src/researchs/problem_cha
 
 # Define the parameters
 params = {
-    "message": f"Problem: {problem} Question: List of strategies which can solve this problem",
+    "message": f"Problem: {problem} Problem_id: 123 Question: List of strategies which can solve this problem",
     "user_id": "d",
-    "thread_id": str(uuid.uuid4())
+    "thread_id": str(uuid.uuid4()),
+    "model": "llama3.2"
 }
 
 # Make the POST request
