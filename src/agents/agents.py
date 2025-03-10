@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from langgraph.graph.state import CompiledStateGraph
 
 from agents.global_chatbot import global_chatbot
+from agents.problem_chatbot import problem_chatbot
 from agents.bg_task_agent.bg_task_agent import bg_task_agent
 from agents.chatbot import chatbot
 from agents.research_assistant import research_assistant
@@ -21,6 +22,7 @@ class Agent:
 
 agents: dict[str, Agent] = {
     "global_chatbot": Agent(description="A chatbot used in the entire website.", graph=global_chatbot),
+    "problem_chatbot": Agent(description="A chatbot used for problem-solving.", graph=problem_chatbot),
     "chatbot": Agent(description="A simple chatbot.", graph=chatbot),
     "research-assistant": Agent(
         description="A research assistant with web search and calculator.", graph=research_assistant

@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 import json
 from fastapi import HTTPException
 from langchain_core.messages import (
@@ -85,6 +85,7 @@ async def store_chat_history(user_input: UserInput, ai_output: ChatMessage, thre
     thread_id = thread_id
     human_message = user_input.message
     ai_message = ai_output.content
+    ai_timestamp = datetime.now().isoformat()
     if user_id:
         print(f'CONTAIN USER ID {ai_output.metadata}')
         # Create message entries
@@ -92,8 +93,8 @@ async def store_chat_history(user_input: UserInput, ai_output: ChatMessage, thre
         ai_entry = {
             "type": "ai",
             "content": ai_message,
-            "metadata": {'model': ai_output.metadata["model"]},
-            "timestamp": ai_output.metadata["created_at"]
+            "metadata": {'model': user_input.model},
+            "timestamp": ai_timestamp
         }
         # Check if the user exists
         user_data = collection.find_one({"user_id": user_id})

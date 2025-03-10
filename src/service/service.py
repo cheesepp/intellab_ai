@@ -230,7 +230,10 @@ async def message_generator(
         # Check if event["metadata"] is a string and convert it to a dictionary
         metadata_dict = event["metadata"]
         # print("================ DATA ===============")
-        # print(event["data"])
+        # print(event)
+        if "langgraph_node" in metadata_dict and metadata_dict["langgraph_node"] == "guard_output":
+            print("================ GUARD OUTPUT ===============")
+            print(event)
         if "langgraph_node" in metadata_dict and metadata_dict["langgraph_node"] == "summarize_conversation":
             continue
         new_messages = []

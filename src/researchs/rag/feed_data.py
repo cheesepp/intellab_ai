@@ -10,7 +10,12 @@ from langchain_core.documents import Document
 from langchain_community.query_constructors.pgvector import PGVectorTranslator
 from langchain.chains.query_constructor.schema import AttributeInfo
 from langchain.retrievers.self_query.base import SelfQueryRetriever
+from langchain.chains.query_constructor.base import get_query_constructor_prompt
+from langchain.chains.query_constructor.base import StructuredQueryOutputParser
+from langchain_core.output_parsers import StrOutputParser
 
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnablePassthrough, RunnableParallel
 def get_lessons_with_metadata(connection_string: str):
     """
     Connects to PostgreSQL, retrieves lesson and course data, 
@@ -73,7 +78,7 @@ def chunk_data(data):
 
 def create_embeddings():
     ''' Function to create vector embeddings '''
-    ollama_embeddings = OllamaEmbeddings(model="nomic-embed-text")
+    ollama_embeddings = OllamaEmbeddings(model="nomic-embed-text", base_url="http://localhost:11434")
     return ollama_embeddings
 
 def stuff_vectordatabase(chunks, embeddings, collection_name, connection_str):
@@ -123,12 +128,78 @@ if __name__ == "__main__":
             type="string",
         ),
     ]
+    
+    # Examples for few-shot learning
+    examples = [
+        (
+            "Summarize each lessons from course Matrix Data Structure Guide with course id 4e26b4bd-d406-4641-9d68-3ba8e1c39c97",
+            {
+                "query": "all lessons of course",
+                "filter": 'and(in("course_name", ["Matrix Data Structure Guide"]),in("course_id", ["4e26b4bd-d406-4641-9d68-3ba8e1c39c97"]))',
+            },
+        ),
+    ]
+    
 
     document_content_description = "Lesson content about datastructure and algorithms techniques"
-    llm = ChatOllama(model="llama3.2", temperature=0)
-    retriever = SelfQueryRetriever.from_llm(
-        llm, vectorstore, document_content_description, metadata_field_info, verbose=True
+    
+    # Create constructor prompt
+    constructor_prompt = get_query_constructor_prompt(
+        document_content_description,
+        metadata_field_info,
+        allowed_comparators=PGVectorTranslator.allowed_comparators,
+        examples=examples,
     )
-    response = retriever.invoke("What are the name of all lessons in The Logic Building Problems courses?")
-    print(response)
+    
+    llm = ChatOllama(model="llama3.2", temperature=0, base_url="http://localhost:11434")
+    # Create query constructor
+    output_parser = StructuredQueryOutputParser.from_components()  
+   
+    query_constructor = constructor_prompt | llm | output_parser
 
+    # Initialize the Self-Query Retriever
+    retriever = SelfQueryRetriever(
+        query_constructor=query_constructor,
+        vectorstore=vectorstore,
+        structured_query_translator=PGVectorTranslator(),
+        search_kwargs={'k': 5}
+    )
+
+
+    # retriever = SelfQueryRetriever.from_llm(
+    #     llm, vectorstore, document_content_description, metadata_field_info, verbose=True
+    # )
+    # response = retriever.invoke("What are the name of all lessons in The Logic Building Problems courses?")
+    # print(response)
+    template = '''You are a summary expert in summarizing lessons from courses about programming. Reply in a professional and friendly tone with each lesson is a bullet point starts with its lessons name and lesson content.
+    
+    Use this context to answer the question:
+    {context}
+    Question: {question}'''
+    
+    prompt = ChatPromptTemplate.from_template(template)
+
+    def format_docs(docs):
+        return "\n\n".join(f"{doc.page_content}\n\nMetadata: {doc.metadata}" for doc in docs)
+
+    # Create a chatbot Question & Answer chain from the retriever
+    rag_chain_from_docs = (
+        RunnablePassthrough.assign(
+            context=(lambda x: format_docs(x["context"])))
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
+
+    rag_chain_with_source = RunnableParallel(
+        {"context": retriever, "question": RunnablePassthrough()}
+    ).assign(answer=rag_chain_from_docs)
+
+    # Example user query
+    query = "Summarize each lessons from course Matrix Data Structure Guide with course id 4e26b4bd-d406-4641-9d68-3ba8e1c39c97"
+
+    # Perform the retrieval and generate the response
+    response = rag_chain_with_source.invoke({query})
+
+    # Display the response
+    print(response)
