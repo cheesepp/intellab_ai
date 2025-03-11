@@ -128,7 +128,9 @@ async def message_generator(
             event["event"] == "on_chat_model_stream"
             and user_input.stream_tokens
             and "llama_guard" not in event.get("tags", [])
+            and metadata_dict["langgraph_node"] != "guard_output"
         ):
+            # print(f"=============== METADATA {metadata_dict['langgraph_node']} =================")
             content = remove_tool_calls(event["data"]["chunk"].content)
             if content:
                 # Empty content in the context of OpenAI usually means

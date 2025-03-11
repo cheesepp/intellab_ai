@@ -10,6 +10,7 @@ from langchain_core.runnables import (
 from langchain_core.prompts import ChatPromptTemplate
 from typing import Literal, Annotated, TypedDict
 from langchain_core.messages import SystemMessage, RemoveMessage
+from langchain_postgres import PGVector
 from langgraph.graph import StateGraph, START, END, add_messages
 from langchain_core.messages import (
     AnyMessage,
@@ -68,19 +69,21 @@ RESPONSE GUIDELINES:
 2. Include examples to illustrate complex concepts
 3. Break down algorithmic approaches step-by-step
 4. Discuss time/space complexity when relevant
-5. When recommending courses, use the format: [Course Title](https://localhost:3000/courses/course_id)
-6. Only recommend courses mentioned in the provided context
-7. If you cannot answer based on the provided materials, acknowledge this clearly
+5. When recommending problems, use the format: [Problem Title](https://localhost:3000/problems/problem_id)
+6. When recommending courses, use the format: [Course Title](https://localhost:3000/courses/course_id)
+7. Only recommend courses mentioned in the provided context
+8. If you cannot answer based on the provided materials, acknowledge this clearly
 
 Answer directly without phrases like "Based on the context" or "According to the materials."""
 
-loader = CSVLoader(file_path='./researchs/courses.csv')
+loader = CSVLoader(file_path='./documents/courses.csv')
+problem_loader = CSVLoader(file_path='./documents/problems.csv')
 embeddings = OllamaEmbeddings(
     model="nomic-embed-text",
 )
 # Create an index using the loaded documents
 index_creator = VectorstoreIndexCreator(embedding=embeddings)
-docsearch = index_creator.from_loaders([loader])
+docsearch = index_creator.from_loaders([loader, problem_loader])
 prompt = ChatPromptTemplate.from_template(template)
 
 # Define the logic to call the model
