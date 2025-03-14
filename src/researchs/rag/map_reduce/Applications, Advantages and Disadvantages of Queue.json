@@ -1,0 +1,7 @@
+{
+    "generate_summary": {
+        "summaries": [
+            "Lesson: Applications, Advantages and Disadvantages of Queue\n\n\u2022 **Primary Queue Operations**: The primary queue operations include enqueue (inserting an element at the rear end) and dequeue (removing an element from the front end), both of which have a time complexity of O(1).\n\u2022 **Types of Queues**: There are three main types of queues: Simple Queue, Circular Queue, and Priority Queue. Each has its own characteristics and use cases.\n\u2022 **Advantages and Disadvantages of Queue**: The advantages of using a queue include efficient management of large amounts of data, fast insertion and deletion operations, and suitability for multi-threading and shared resource allocation. However, the disadvantages include time-consuming middle element insertion and deletion, limited search capabilities, and fixed maximum size in array implementations.\n\nNote: I've focused on the most important concepts and techniques taught in the lesson, while omitting some details to keep the summary concise."
+        ]
+    }
+}

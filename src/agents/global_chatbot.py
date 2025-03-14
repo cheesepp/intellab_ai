@@ -171,17 +171,50 @@ async def llama_guard_output(state: State, config: RunnableConfig) -> State:
     # llama_guard = LlamaGuard()
     # safety_output = await llama_guard.ainvoke("User", state["messages"])
     # return {"output_safety": safety_output}
-    checking_template = """You are an expert to monitoring the input question whether it relevant to mathematics and programming or not, if irrelevant to mathematics and programming, it will be marked as unsafe, other wise marked as safe:
-    Response: {request}
-    Answer:
-    - First line JUST RETURN 'safe' word and 'unsafe' word in lowercase without adding any words.
-    - If unsafe or irrelevant to mathematics and programming, a second line must include a response to sorry user and tell the reason naturally
-    - If safe, a second line must include the reason why it safe"""
+    checking_template = """You are an expert at determining whether an input question is relevant to programming or not. 
+    
+    User question: {question}
+    Your task is to:
+    1. Analyze the question carefully
+    2. Determine if it's relevant to programming topics (languages, algorithms, development, computer science, software engineering, etc.)
+    3. Provide a clear, binary response
+
+    For each question, respond with:
+    - FIRST LINE: Either "relevant" or "irrelevant" (lowercase, no additional words)
+    - SECOND LINE: A brief explanation of your decision
+
+    Programming-relevant questions include:
+    - Programming languages and their features
+    - Algorithms and data structures
+    - Software development practices
+    - Computer science concepts
+    - Coding problems and their solutions
+    - System design and architecture
+    - Development tools and environments
+
+    Examples:
+    Input: "How do I implement a binary search in Python?"
+    Output:
+    relevant
+    This question directly relates to implementing an algorithm in a programming language.
+
+    Input: "What's the best recipe for chocolate chip cookies?"
+    Output:
+    irrelevant
+    This question is about cooking/baking and has no connection to programming.
+
+    Input: "Can you explain the Singleton pattern in Java?"
+    Output:
+    relevant
+    This question concerns a design pattern used in object-oriented programming.
+
+    Keep your responses concise and focused solely on the relevance determination."""
+    
     prompt = ChatPromptTemplate.from_template(checking_template)
     model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     checking_output = prompt | model
     messages = state["messages"]
-    response = await checking_output.ainvoke({"request": messages[-1].content})
+    response = await checking_output.ainvoke({"question": messages[-1].content})
     llama_guard = parse_llama_guard_relevant_topic(response.content)
     return {"is_relevant": llama_guard}
     

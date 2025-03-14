@@ -82,10 +82,10 @@ def parse_llama_guard_output(output: str) -> LlamaGuardOutput:
 def parse_llama_guard_relevant_topic(output: str) -> LlamaGuardOutput:
     print("========== PARSE AI OUTPUT CONTENT ===========")
     print(output)
-    if output == "safe":
-        return LlamaGuardOutput(safety_assessment=SafetyAssessment.SAFE)
     parsed_output = output.split("\n")
-    if len(parsed_output) != 2 or parsed_output[0] != "unsafe":
+    if parsed_output[0].strip() == "relevant":
+        return LlamaGuardOutput(safety_assessment=SafetyAssessment.SAFE)
+    if len(parsed_output) != 2 or parsed_output[0].strip() != "irrelevant":
         return LlamaGuardOutput(safety_assessment=SafetyAssessment.ERROR)
     try:
         unsafe_response = parsed_output[1]

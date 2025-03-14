@@ -39,6 +39,7 @@ from service.utils import (
     convert_message_content_to_string,
     langchain_to_chat_message,
     remove_tool_calls,
+    save_to_pdf,
     store_chat_history,
     store_problem_chat_history,
     store_problem_title,
@@ -51,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/invoke")
 
-@router.post("/summarize_agent",  tags=["Summarize Agent"], 
+@router.post("/summarize_assistant",  tags=["Summarize Agent"], 
              description="""
              This agent summarizes lessons from a course.
              Request format:
@@ -126,6 +127,7 @@ async def invoke(request: Request, user_input: UserInput) -> ChatMessage:
         output = langchain_to_chat_message(response["messages"][-1])
         output.run_id = str(run_id)
         output.thread_id = str(thread_id)
+        print(output)
         if agent_id == "global_chatbot":
             print("STORE CHAT")
             await store_chat_history(user_input, output, thread_id, timestamp)
@@ -142,16 +144,10 @@ async def invoke(request: Request, user_input: UserInput) -> ChatMessage:
             
             extract_values = extract_course_info(user_input.message)
             pdf_path = os.path.join(os.getcwd(), "summary.pdf")
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Arial", size=12)
-            pdf.cell(200, 10, txt=f'{extract_values["course_name"]} Summary', ln=True, align='C')
-            pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d')}", ln=True, align='L')
-            pdf.multi_cell(0, 10, txt=output.content)  # Add output content to the PDF
-            print(f"Extract value {extract_values}")
             # Write PDF to file
-            pdf.output(pdf_path)
-            
+            save_to_pdf(markdown_content=output.content, path=pdf_path, values=extract_values)
+            print(f"Extract value {extract_values}")
+        print(output)
         return output
     except Exception as e:
         logger.error(f"An exception occurred: {e}")

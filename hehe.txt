@@ -1,0 +1,29 @@
+1. Lesson: Primality Test | Set 1 (Introduction and School Method)
+   • Introduction to the concept of primality testing and different methods for determining if a number is prime or composite
+   • Explanation of the school method, also known as trial division, which checks divisibility up to the square root of the number
+   • Discussion on the efficiency of the school method and its limitations in terms of computational complexity
+
+2. Lesson: Primality Test | Set 2 (Fermat Method)
+   • Introduction to Fermat's primality test, a probabilistic algorithm for determining if a number is probably prime or composite
+   • Explanation of the basis of the test, which relies on Fermat's Little Theorem and Wilson's theorem
+   • Discussion on the advantages and disadvantages of using the Fermat method compared to other primality testing methods
+
+3. Lesson: Primality Test | Set 3 (Miller-Rabin)
+   • Introduction to the Miller-Rabin primality test, a probabilistic algorithm for determining if a number is probably prime or composite
+   • Explanation of the basis of the test, which relies on repeated squaring modulo the number and checking for non-trivial factors
+   • Discussion on the advantages and disadvantages of using the Miller-Rabin method compared to other primality testing methods, including its ability to handle large numbers more efficiently than Fermat's method
+
+4. Lesson: Primality Test | Set 4 (Solovay-Strassen)
+   • Introduction to the Solovay-Strassen primality test, a deterministic algorithm for determining if a number is prime or composite
+   • Explanation of the basis of the test, which relies on the Chinese Remainder Theorem and repeated squaring modulo powers of 2 and 3
+   • Discussion on the advantages and disadvantages of using the Solovay-Strassen method compared to other primality testing methods, including its ability to handle large numbers more efficiently than Fermat's method while still being deterministic
+
+5. Lesson: Sieve Algorithms for Prime Number Generation
+   • Introduction to sieve algorithms and their use in generating prime numbers
+   • Explanation of the Sieve of Eratosthenes, a simple algorithm for generating all primes up to a given limit
+   • Discussion on variations and optimizations of the Sieve of Eratosthenes, such as the Segmented Sieve and Bitwise Sieve
+
+6. Lesson: Prime Number Algorithms and Related Problems
+   • Explanation of various algorithms for solving problems related to prime numbers, such as finding two distinct primes with a given product or print all prime numbers less than or equal to N
+   • Discussion on the efficiency and complexity analysis of these algorithms, including their time and space requirements
+   • Introduction to other related problems, such as prime factorization and Goldbach's Conjecture, and their solutions using various algorithms and techniques.

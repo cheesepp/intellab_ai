@@ -15,16 +15,24 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph.state import CompiledStateGraph
 
 from agents import DEFAULT_AGENT, get_agent, get_all_agent_info
+from agents.llama_guard import SafetyAssessment
 from agents.summarize_agent import extract_course_info
 from core import settings
 from schema import (
     StreamInput,
+)
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    ToolMessage,
 )
 from service.utils import (
     _parse_input,
     convert_message_content_to_string,
     langchain_to_chat_message,
     remove_tool_calls,
+    save_to_pdf,
     store_chat_history,
     store_problem_chat_history,
     store_title,
@@ -47,6 +55,9 @@ async def message_generator(
     agent: CompiledStateGraph = get_agent(agent_id)
     kwargs, run_id, thread_id = _parse_input(user_input)
     timestamp = datetime.now().isoformat()
+    
+    is_relevant = False
+    
     if agent_id == "title_generator":
         fake_thread_id = uuid4()
         run_id = uuid4()
@@ -58,12 +69,13 @@ async def message_generator(
     }
     # Process streamed events from the graph and yield messages over the SSE stream.
     async for event in agent.astream_events(**kwargs, version="v2"):
+        print(f'================ IS RELEVANT {is_relevant} ==============')
         if not event:
             continue
         # Check if event["metadata"] is a string and convert it to a dictionary
         metadata_dict = event["metadata"]
         # print("================ DATA ===============")
-        # print(event)
+        print(event)
         if "langgraph_node" in metadata_dict and metadata_dict["langgraph_node"] == "guard_output":
             print("================ GUARD OUTPUT ===============")
             print(event)
@@ -82,7 +94,7 @@ async def message_generator(
         # Also yield intermediate messages from agents.utils.CustomData.adispatch().
         if event["event"] == "on_custom_event" and "custom_data_dispatch" in event.get("tags", []):
             new_messages = [event["data"]]
-
+        
         for message in new_messages:
             try:
                 chat_message = langchain_to_chat_message(message)
@@ -111,32 +123,49 @@ async def message_generator(
             
                 extract_values = extract_course_info(user_input.message)
                 pdf_path = os.path.join(os.getcwd(), "summary.pdf")
-                pdf = FPDF()
-                pdf.add_page()
-                pdf.set_font("Arial", size=12)
-                pdf.cell(200, 10, txt=f'{extract_values["course_name"]} Summary', ln=True, align='C')
-                pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d')}", ln=True, align='L')
-                pdf.multi_cell(0, 10, txt=chat_message.content)  # Add output content to the PDF
-                print(f"Extract value {extract_values}")
                 # Write PDF to file
-                pdf.output(pdf_path)
+                save_to_pdf(markdown_content=chat_message.content, path=pdf_path, values=extract_values)
+                print(f"Extract value {extract_values}")
             print(message)
             yield f"data: {json.dumps({'type': 'message', 'content': chat_message.model_dump()})}\n\n"
-
+        
+        if (event["event"] == "on_chat_model_stream"
+            and "langgraph_node" in metadata_dict 
+            and  metadata_dict["langgraph_node"] == "guard_output"):
+            if isinstance(event["data"]["chunk"], AIMessage):
+                print(f'---------- MATCH CONDITION GUARD OUTPUT {event["data"]["chunk"]}')
+                if  re.search(r' relevant', event["data"]["chunk"].content, re.IGNORECASE):
+            
+                    is_relevant = True
+                    print(f'---------- MATCH CONDITION {event["data"]["chunk"]}')
+                else:
+                    print(f'---------- DO NOT MATCH CONDITION {event["data"]["chunk"]}')
+        if "langgraph_node" in metadata_dict and metadata_dict["langgraph_node"] == "guard_output" and is_relevant:
+            print(f'------------ COME HERE {event} ------------')
+            continue
+            
         # Yield tokens streamed from LLMs.
         if (
             event["event"] == "on_chat_model_stream"
             and user_input.stream_tokens
             and "llama_guard" not in event.get("tags", [])
-            and metadata_dict["langgraph_node"] != "guard_output"
         ):
+            
+            print(event)
             # print(f"=============== METADATA {metadata_dict['langgraph_node']} =================")
             content = remove_tool_calls(event["data"]["chunk"].content)
             if content:
                 # Empty content in the context of OpenAI usually means
                 # that the model is asking for a tool to be invoked.
                 # So we only print non-empty content.
-                yield f"data: {json.dumps({'type': 'token', 'content': convert_message_content_to_string(content)})}\n\n"
+                # if "langgraph_node" in metadata_dict and metadata_dict["langgraph_node"] == "guard_output" and is_relevant:
+                #     print(f'--------- RETURN {"langgraph_node" in metadata_dict and metadata_dict["langgraph_node"] == "guard_output" and is_relevant}')
+                #     return
+                #     yield "empty"
+                # else:
+                #     check = "langgraph_node" in metadata_dict and metadata_dict["langgraph_node"] == "guard_output" and is_relevant
+                #     yield f"data: {json.dumps({'type': 'token', 'content': convert_message_content_to_string(content), 'check': check, 'event': event['event']}, )}\n\n"
+                yield f"data: {json.dumps({'type': 'token', 'content': convert_message_content_to_string(content)}, )}\n\n"
             continue
 
     yield "data: [DONE]\n\n"
@@ -157,7 +186,7 @@ def _sse_response_example() -> dict[int, Any]:
 
 router = APIRouter(prefix="/stream")
 
-@router.post("/summarize_agent",  tags=["Summarize Agent"], 
+@router.post("/summarize_assistant",  tags=["Summarize Agent"], 
              response_class=StreamingResponse, responses=_sse_response_example(),
              description="""
              This agent summarizes lessons from a course.

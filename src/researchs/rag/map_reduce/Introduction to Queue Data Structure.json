@@ -1,0 +1,7 @@
+{
+    "generate_summary": {
+        "summaries": [
+            "Lesson: Introduction to Queue Data Structure\n\n\u2022 **Queue Terminology**: A queue is defined by its front (the first entry ready to be served), rear (the last entry added), size (current number of elements), and capacity (maximum number of elements it can hold).\n\u2022 **Queue Operations**: The lesson introduces six essential operations on a queue: enqueue (adds an element to the end), dequeue (removes an element from the front), peek or front operation (returns the front element without removal), size operation (returns the current number of elements), isEmpty operation (returns true if the queue is empty), and isFull operation (returns true if the queue is full).\n\u2022 **Complexity Analysis**: The lesson provides time and space complexity analysis for each operation, with all operations having a time complexity of O(1) and space complexity of O(1)."
+        ]
+    }
+}
