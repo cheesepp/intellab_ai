@@ -1,0 +1,7 @@
+{
+    "generate_summary": {
+        "summaries": [
+            "Here is the extracted information:\n\n**Lesson Name:** Different Types of Queues and its Applications\n\n**Three Most Important Concepts:**\n\n1. **Queue Data Structure**: A queue is a linear data structure that follows the FIFO (First-In-First-Out) principle, where elements are added to the end of the queue and removed from the front.\n2. **Types of Queues**: There are several types of queues, including Linear Queue, Circular Queue, Priority Queue, Double-ended Queue, and Concurrent Queue, each with its own characteristics and applications.\n3. **Queue Operations**: Queues support various operations such as enqueue (add element), dequeue (remove element), peek (view the front element), and isEmpty (check if the queue is empty).\n\n**Summary:**\n\n- Lesson: Different Types of Queues and its Applications\n\u2022 A queue data structure follows the FIFO principle, where elements are added to the end and removed from the front.\n\u2022 There are several types of queues, including Linear Queue, Circular Queue, Priority Queue, Double-ended Queue, and Concurrent Queue, each with its own characteristics and applications.\n\u2022 Queues support various operations such as enqueue, dequeue, peek, and isEmpty, which enable efficient data manipulation and retrieval."
+        ]
+    }
+}

@@ -1,0 +1,125 @@
+problem_id,problem_name,description,score,problem_level
+7328995b-6079-4bd9-8be0-7c9152d5a73b,Merge sorted array,"You are given two integer arrays `nums1` and `nums2`, **sorted in non-decreasing order**, and two integers `m` and `n`, representing the number of elements in `nums1` and `nums2` respectively.
+
+**Merge** `nums1` and `nums2` into a single array sorted in non-decreasing order.
+
+The final sorted array should not be returned by the function, but instead be _stored_ inside the array `nums1`. To accommodate this, `nums1` has a length of `m + n`, where the first `m` elements denote the elements that should be merged, and the last `n` elements are set to `0` and should be ignored. `nums2` has a length of `n`.
+
+#### Example 1:
+
+```
+Input: nums1 = [1,2,3,0,0,0], m = 3, nums2 = [2,5,6], n = 3
+Output: [1,2,2,3,5,6]
+```
+
+#### Example 2:
+
+```
+Input: nums1 = [1], m = 1, nums2 = [], n = 0
+Output: [1]
+```
+
+#### Example 3:
+
+```
+Input: nums1 = [0], m = 0, nums2 = [1], n = 1
+Output: [1]
+```",2,easy
+73c532f9-4d55-4737-ae19-3006e02864cc,Plus one,"You are given a large integer represented as an integer array `digits`, where each `digits[i]` is the i<sup>th</sup> digit of the integer. The digits are ordered from most significant to least significant in left-to-right order. The large integer does not contain any leading `0`'s.
+
+Increment the large integer by one and return the resulting array of digits.
+
+#### Example 1:
+
+```
+Input: digits = [1,2,3]
+Output: [1,2,4]
+```
+
+#### Example 2:
+
+```
+Input: digits = [4,3,2,1]
+Output: [4,3,2,2]
+```
+
+#### Example 3:
+
+```
+Input: digits = [9]
+Output: [1,0]
+```",2,easy
+82978535-a8da-46e1-a39a-31a232e3fffc,Search Insert Position,"Given a sorted array of distinct integers and a target value, return the index if the target is found. If not, return the index where it would be if it were inserted in order.
+
+You must write an algorithm with `O(log n)` runtime complexity.
+
+#### Example 1:
+
+```
+Input: nums = [1,3,5,6], target = 5
+Output: 2
+```
+
+#### Example 2:
+
+```
+Input: nums = [1,3,5,6], target = 2
+Output: 1
+```
+
+#### Example 3:
+
+```
+Input: nums = [1,3,5,6], target = 7
+Output: 4
+```",2,easy
+e608ebb7-07ef-4a2f-8081-92e5993e6118,Single Number,"Given a **non-empty** array of integers `nums`, every element appears _twice_ except for one. Find that single one.
+
+You must implement a solution with a linear runtime complexity and use only constant extra space.
+
+#### Example 1:
+
+```
+Input: nums = [2,2,1]
+Output: 1
+```
+
+#### Example 2:
+
+```
+Input: nums = [4,1,2,1,2]
+Output: 4
+```
+
+#### Example 3:
+
+```
+Input: nums = [1]
+Output: 1
+```",2,easy
+591b3457-2157-4d61-b03d-d53f8666342c,Two sum,"Given an array of integers `nums` and an integer `target`, return indices of the two numbers such that they add up to `target`.
+
+You may assume that each input would have exactly one solution, and you may not use the same element twice.
+
+You can return the answer in any order.
+
+#### Example 1:
+
+```
+Input: nums = [2,7,11,15], target = 9
+Output: [0,1]
+```
+
+#### Example 2:
+
+```
+Input: nums = [3,2,4], target = 6
+Output: [1,2]
+```
+
+#### Example 3:
+
+```
+Input: nums = [3,3], target = 6
+Output: [0,1]
+```",2,easy

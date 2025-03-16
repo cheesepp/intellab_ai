@@ -19,6 +19,9 @@ class LlamaGuardOutput(BaseModel):
     unsafe_categories: list[str] = Field(
         description="If content is unsafe, the list of unsafe categories.", default=[]
     )
+    unsafe_response: str | None = Field(
+        description="If content is unsafe, the list of unsafe categories.", default=None
+    )
 
 
 unsafe_content_categories = {
@@ -59,6 +62,8 @@ Provide your safety assessment for ONLY THE LAST {{role}} in the above conversat
 
 
 def parse_llama_guard_output(output: str) -> LlamaGuardOutput:
+    print("========== PARSE LLAMA GUARD OUTPUT ===========")
+    print(output)
     if output == "safe":
         return LlamaGuardOutput(safety_assessment=SafetyAssessment.SAFE)
     parsed_output = output.split("\n")
@@ -70,6 +75,24 @@ def parse_llama_guard_output(output: str) -> LlamaGuardOutput:
         return LlamaGuardOutput(
             safety_assessment=SafetyAssessment.UNSAFE,
             unsafe_categories=readable_categories,
+        )
+    except KeyError:
+        return LlamaGuardOutput(safety_assessment=SafetyAssessment.ERROR)
+
+def parse_llama_guard_relevant_topic(output: str) -> LlamaGuardOutput:
+    print("========== PARSE AI OUTPUT CONTENT ===========")
+    print(output)
+    parsed_output = output.split("\n")
+    if parsed_output[0].strip() == "relevant":
+        return LlamaGuardOutput(safety_assessment=SafetyAssessment.SAFE)
+    if len(parsed_output) != 2 or parsed_output[0].strip() != "irrelevant":
+        return LlamaGuardOutput(safety_assessment=SafetyAssessment.ERROR)
+    try:
+        unsafe_response = parsed_output[1]
+        print(f"========== PARSED AI OUTPUT CONTENT OUTPUT: {parsed_output} RESPONSE: {unsafe_response} {len(parsed_output)} ===========")
+        return LlamaGuardOutput(
+            safety_assessment=SafetyAssessment.UNSAFE,
+            unsafe_response=unsafe_response,
         )
     except KeyError:
         return LlamaGuardOutput(safety_assessment=SafetyAssessment.ERROR)

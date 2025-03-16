@@ -1,98 +1,95 @@
-from logging import config
-# from langchain.embeddings import OpenAIEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-# from langchain.vectorstores import Chroma
-import psycopg2
-import openai
-from langchain_core.prompts import ChatPromptTemplate
-from langchain.tools import Tool
-from langchain_core.tools import BaseTool, tool
-from core.llm import get_model
-from core.settings import settings
-from langchain.agents import initialize_agent, AgentType
-from langgraph.managed import RemainingSteps
-from agents.llama_guard import LlamaGuardOutput
-from langgraph.graph import END, MessagesState, StateGraph
-from typing import Any
-from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
-from langchain_core.messages import BaseMessage, AIMessage, convert_to_messages
-from langchain.agents import load_tools, create_react_agent, AgentExecutor
-from langchain_core.output_parsers import StrOutputParser
-from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
-from langchain.sql_database import SQLDatabase
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
-from langchain_groq import ChatGroq
+import operator
+import os
 import re
 from typing import Literal
-from pydantic import BaseModel, Field
-from langchain_ollama import OllamaEmbeddings, ChatOllama
-from langchain_openai import ChatOpenAI
- 
-DB_CONNECTION_STRING = "postgresql://postgres:123456@host.docker.internal:5433/intellab-db"
+from langchain_ollama import ChatOllama, OllamaEmbeddings
+from langchain import hub
+from langchain_community.document_loaders import WebBaseLoader
+from langchain_core.documents import Document
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langgraph.graph import START, StateGraph
+import psycopg2
+from sqlalchemy import create_engine
+from typing_extensions import Annotated, List, TypedDict
+from langchain_postgres import PGVector
+from langchain_core.prompts import ChatPromptTemplate
+from langgraph.graph import END, MessagesState, StateGraph
+from langgraph.constants import Send
+from langchain.sql_database import SQLDatabase
+from langchain_core.messages import BaseMessage, AIMessage, convert_to_messages
+from sqlalchemy import create_engine, text
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
+
+from langchain.chains.combine_documents.reduce import (
+    acollapse_docs,
+    split_list_of_docs,
+)
+
+from core import settings
+from core.llm import get_model
+
+DB_CONNECTION_STRING = os.getenv("DB_CONNECTION_STRING")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST")
+
+def create_embeddings():
+    ''' Function to create vector embeddings '''
+    ollama_embeddings = OllamaEmbeddings(model="nomic-embed-text", base_url=OLLAMA_HOST)
+    return ollama_embeddings
+
+embeddings = create_embeddings()
+
+vectorstore = PGVector(embeddings=embeddings, collection_name="lesson_content", connection=DB_CONNECTION_STRING, use_jsonb=True)
+
+
+map_template = """You are an expert at summarizing programming education content. Your task is to create clear, concise summaries of individual lessons.
+
+Lesson content:
+{content}
+
+Based on the provided lesson content:
+1. Extract the lesson name from the section labeled "Lesson name:".
+2. Identify the 3 most important concepts or techniques taught in the lesson.
+3. Create a summary using the following format (start the response with 'Lesson'):
+
+- Lesson: [LESSON NAME]
+• [First key concept with a brief explanation]
+• [Second key concept with a brief explanation]
+• [Third key concept with a brief explanation]
+
+Keep each bullet point concise and focused on one main idea. Include complexity analysis when relevant.
+
+Return the summary for this lesson.
+"""
+map_prompt = ChatPromptTemplate.from_template(map_template)
+
+reduce_template = """
+You are an expert at summarizing programming education content. You have received multiple lesson summaries for the course "{course_name}."
+
+Your task is to provide a brief overall overview that highlights common themes or recurring techniques across the lessons.
+
+Return the final comprehensive summary.
+"""
+reduce_prompt = ChatPromptTemplate.from_template(reduce_template)
 MAX_STRING_LENGTH = 1000000
-# DB_CONNECTION_STRING = "postgresql://postgres:123456@localhost:5433/intellab-db"
 
-class AgentState(MessagesState, total=False):
-    """`total=False` is PEP589 specs.
+# llm = ChatOllama(model="llama3.2", temperature=0, base_url="http://localhost:11434")
 
-    documentation: https://typing.readthedocs.io/en/latest/spec/typeddict.html#totality
-    """
+# Define state for application
+class State(MessagesState):
+    context: List[Document]
+    answer: str
     course_name: str
     course_id: str
-    response: str
-    is_contained: bool
-    
-    
-def get_schema(_):
-    db = SQLDatabase.from_uri(DB_CONNECTION_STRING)  # Adjust as needed
-    schema = db.get_table_info()
-    return schema
+    summaries: Annotated[list, operator.add]
+    collapsed_summaries: List[Document]
+    regenerate: bool
 
-# template = """
-# You are tasked with summarizing lessons from a course based on a given course name. Use the provided table schema, question, SQL query, and SQL response to generate a natural language response.
-# Do not need to tell the process, just return the narutal summarization response with at least 150 words and do not abbreviate
-# Prompt Template:
-
-# Schema:
-# {schema}
-
-# Task: Based on the table schema, question, SQL query, and SQL response:
-
-# Generate the SQL query below by replacing the placeholder {course_id} with the actual course name provided by the user.
-# SQL Query:
-# SELECT lesson_name, content FROM lessons WHERE course_id = '{course_id}';
-
-# Once the query is executed, use the query result ({response}) to summarize the lessons of {course_name} and generate a natural language response to the question.
-
-# Output format: just return the summary content, not SQL generation
-
-# {response}
-# Question: Summarize all lessons for the course with name {course_name}.
-# """
-template = """
-You are tasked with summarizing lessons from a course based on a given course name. Use the provided question, SQL query, and SQL response to generate a natural language response.
-Do not need to tell the process, just return the narutal summarization response with AT LEAST 150 words
-Prompt Template:
-
-Task: Based on the table schema, question, SQL query, and SQL response:
-
-Use the query result ({response}) to summarize the lessons of {course_name} and generate a natural language response to the question.
-
-Output format: just return the summary content, not SQL generation
-
-{response}
-Question: Summarize all lessons for the course with name {course_name}.
-"""
-prompt_response = ChatPromptTemplate.from_template(template)
-
-def run_query(course_id):
-    db = SQLDatabase.from_uri(DB_CONNECTION_STRING)  # Adjust as needed
-    query = f"SELECT lesson_name, content FROM lessons WHERE course_id = '{course_id}' LIMIT 3"
-    return db.run(query)
-
-# llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.0)
-# llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.0)
+token_max = 100000
+def length_function(documents: List[Document], llm: BaseChatModel) -> int:
+    """Get number of tokens for input contents."""
+    return sum(llm.get_num_tokens(doc.page_content) for doc in documents)
 
 # --- Utilites ---
 def extract_course_info(input_string):
@@ -101,7 +98,7 @@ def extract_course_info(input_string):
     
     # Search the string for matches
     match = re.search(pattern, input_string, re.IGNORECASE)
-    
+    print(match)
     if match:
         # Extracted groups
         course_name = match.group(1)
@@ -115,9 +112,7 @@ def extract_course_info(input_string):
     else:
         raise ValueError("Input string does not match the expected format.")
 
-
-# ---- extract message node ----
-def extract_message(state: AgentState) -> Literal["check_contained_summary", "generate"]:
+def extract_message(state: State):
     print("-------- EXTRACT MESSAGE ---------")
     message_content = state["messages"][-1].content
     extract_values = extract_course_info(message_content)
@@ -127,171 +122,220 @@ def extract_message(state: AgentState) -> Literal["check_contained_summary", "ge
         "course_id": extract_values["course_id"],
         "regenerate": extract_values["regenerate"]
     }
+    
+def retrieve(state: State):
+    course_name = state["course_name"]
+    retrieved_docs = vectorstore.as_retriever(search_kwargs={'k': 50, 'filter': {'course_name': course_name}})
+    docs = retrieved_docs.invoke(course_name)
+    return {"context": docs}
 
 # check summary content tool:
 # contain -> finalize response, otherwise generate
 
-# ----  check contained summary CONDITIONAL node----
-def check_contained_summary(state: AgentState) -> Literal["retrieve_existing", "generate"]:
+# Define your database connection
+DB_ENGINE = create_engine(DB_CONNECTION_STRING)
+
+# ---- Check Contained Summary Conditional Node ----
+def check_contained_summary(state: dict) -> Literal["retrieve_existing", "retrieve"]:
     print("-------- CHECK CONTAINED SUMMARY ---------")
+    
     course_name = state['course_name']
-    regenerate = state['regenerate']
-    query = f"""
+    regenerate = state.get('regenerate', False)  # Use `.get()` to avoid KeyError
+    
+    query = text("""
         SELECT summary_content
         FROM course_summary
-        WHERE course_name = '{course_name}';
-    """
-    db = SQLDatabase.from_uri(DB_CONNECTION_STRING)  # Adjust as needed
-    result = db.run(query)
-    if result == '' or regenerate:
+        WHERE course_name = :course_name
+    """)
+    
+    with DB_ENGINE.connect() as conn:
+        result = conn.execute(query, {"course_name": course_name}).fetchone()
+    
+    if not result or result[0] == '' or regenerate:
         print("-------- REGENERATE --------")
-        return "generate"
+        return "retrieve"
+    
     print("-------- RETRIEVE EXISTING --------")
     return "retrieve_existing"
 
-# ---- retrieve existing summary content node ----
-def retrieve_existing(state: AgentState):
+# ---- Retrieve Existing Summary Content Node ----
+import re
+
+def retrieve_existing(state: dict):
     print("------- EXISTED --------")
+    
     course_name = state['course_name']
-    query = f"""
+    
+    query = text("""
         SELECT summary_content
         FROM course_summary
-        WHERE course_name = '{course_name}';
-    """
-    db = SQLDatabase.from_uri(DB_CONNECTION_STRING, max_string_length=MAX_STRING_LENGTH)  # Adjust as needed
-    result = db.run(query)
-    cleaned_string = re.sub(r"^\[\('", "", result)
-    cleaned_string = re.sub(r"\',\)\]$", "", cleaned_string)
-    return {"response": cleaned_string}
+        WHERE course_name = :course_name
+    """)
 
-# ---- generate node ----
-def generate(state: AgentState, config: RunnableConfig):
-    print("-------- GENERATE ---------")
-    llm = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    full_chain = (
-        RunnablePassthrough.assign(
-            schema=get_schema,
-            response=lambda vars: run_query(vars["course_id"]),
-        )
-        | prompt_response
-        | llm
-        | StrOutputParser()
-    )
-    response = full_chain.invoke({"course_name": state["course_name"], "course_id": state["course_id"]})
-    with open("hehet.txt", "w") as f:
-        f.write(response)
-    return {"response": response}
- 
-# compare new with existing content
-# more informative and valuable -> store to db, otherwise ignore new content and get the existing
-class ComparisonContent(BaseModel):
-    """Binary score to assess the informative between generated content and existing content."""
-
-    binary_score: str = Field(
-        description="Answer addresses the question, 'yes' or 'no'"
-    )
+    with DB_ENGINE.connect() as conn:
+        result = conn.execute(query, {"course_name": course_name}).fetchone()
     
-CHECKING_SYSTEM = """
-You are the grader system assessing whether the new summary {new_summary} of {course_name} is more informative and valuable than the existing summary content {existing_content}.
-Give a binary score 'yes' or 'no', where 'yes' means that the answer is new summary content more informative and valuable than existing content.
-"""
-
-CHECKING_PROMPT = ChatPromptTemplate.from_template(CHECKING_SYSTEM)
-
-# ---- retrieve existing summary CONDITIONAL node
-def retrieve_existing_summary(state: AgentState, config: RunnableConfig) -> Literal["finalize_response", "store_summary"]:
-    print("-------- Retrieve existing Summary ---------")
-    llm = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    query = f"""
-        SELECT summary_content
-        FROM course_summary
-        WHERE course_name = '{state['course_name']}';
-    """
-    db = SQLDatabase.from_uri(DB_CONNECTION_STRING, max_string_length=MAX_STRING_LENGTH)  # Adjust as needed
-    result = db.run(query)
-    cleaned_string = re.sub(r"^\[\('", "", result)
+    if result is None:
+        return {"answer": ""}
+    
+    cleaned_string = re.sub(r"^\[\('", "", result[0])
     cleaned_string = re.sub(r"\',\)\]$", "", cleaned_string)
     
-    model = CHECKING_PROMPT | llm.with_structured_output(ComparisonContent)
-    comparison_grade: ComparisonContent = model.invoke({"existing_content": cleaned_string, "new_summary": state["response"], "course_name": state["course_name"]})
-    if comparison_grade.binary_score == "no":
-        print("-------- NO - RESPONSE --------")
-        return "finalize_response"
+    return {"answer": cleaned_string}
+
+# This will be the state of the node that we will "map" all
+# documents to in order to generate summaries
+class SummaryState(TypedDict):
+    content: str
+    
+# Here we generate a summary, given a document
+async def generate_summary(state: SummaryState, config: RunnableConfig):
+    prompt = map_prompt.invoke(state["content"])
+    llm = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
+    response = await llm.ainvoke(prompt)
+    return {"summaries": [response.content]}
+
+
+# Here we define the logic to map out over the documents
+# We will use this an edge in the graph
+def map_summaries(state: State):
+    print("============ MAP SUMMARIES ================")
+    # We will return a list of `Send` objects
+    # Each `Send` object consists of the name of a node in the graph
+    # as well as the state to send to that node
+    return [
+        Send("generate_summary", {"content": content}) for content in state["context"]
+    ]
+
+def collect_summaries(state: State):
+    print("============ COLLECT SUMMARIES ================")
+    return {
+        "collapsed_summaries": [Document(summary) for summary in state["summaries"]]
+    }
+
+
+async def _reduce(input: dict, llm: BaseChatModel) -> str:
+    prompt = reduce_prompt.invoke(input)
+    response = await llm.ainvoke(prompt)
+    return response.content
+  
+# Add node to colbasechatlapse summaries
+async def collapse_summaries(state: State):
+    print("============ COLLAPSE SUMMARIES ================")
+    doc_lists = split_list_of_docs(
+        state["collapsed_summaries"], length_function, token_max
+    )
+    print(doc_lists)
+    results = []
+    for doc_list in doc_lists:
+        print("-------- DOC LIST ------------")
+        print(doc_list)
+        results.append(await acollapse_docs(doc_list, _reduce))
+
+    return {"collapsed_summaries": results}
+
+
+# This represents a conditional edge in the graph that determines
+# if we should collapse the summaries or not
+def should_collapse(
+    state: State,
+    config: RunnableConfig
+) -> Literal["collapse_summaries", "generate_final_summary"]:
+    llm = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
+    num_tokens = length_function(state["collapsed_summaries"], llm=llm)
+    if num_tokens > token_max:
+        return "collapse_summaries"
     else:
-        print("-------- YES - STORE --------")
-        return "store_summary"
+        return "generate_final_summary"
 
 # store content to db
 # ---- store summary node ----
-def store_summary(state: AgentState):
+def store_summary(state: State):
+    """Insert a note into the PostgreSQL database."""
     print("-------- STORE SUMMARY --------")
-    new_content = state["response"]
+    new_content = state["answer"]
     course_name = state["course_name"]
     course_id = state["course_id"]
+    try:
+        # Create a database engine
+        engine = create_engine(DB_CONNECTION_STRING)
+        
+        with engine.connect() as conn:
+            # Check if the course summary exists
+            query = text("SELECT summary_content FROM course_summary WHERE course_id = :course_id")
+            result = conn.execute(query, {"course_id": course_id}).scalar()
+
+            if result is None:
+                # Insert new summary
+                insert_query = text("""
+                    INSERT INTO course_summary (course_id, course_name, summary_content)
+                    VALUES (:course_id, :course_name, :new_content)
+                """)
+                conn.execute(insert_query, {"course_id": course_id, "course_name": course_name, "new_content": new_content})
+                print(f"New summary added for course: {course_name}.")
+            elif result == '':
+                # Update existing record if summary_content is empty
+                update_query = text("""
+                    UPDATE course_summary
+                    SET summary_content = :new_content
+                    WHERE course_id = :course_id
+                """)
+                conn.execute(update_query, {"course_id": course_id, "new_content": new_content})
+                print(f"Summary updated for course: {course_name}.")
+            else:
+                print(f"Summary already exists for course: {course_name}. No action needed.")
+            
+            conn.commit()
     
-    query = f"""
-        SELECT summary_content
-        FROM course_summary
-        WHERE course_name = '{course_name}';
-    """
-    db = SQLDatabase.from_uri(DB_CONNECTION_STRING)  # Adjust as needed
-    result = db.run(query)
-    if result == '':
-        # No summary record exists for the course, so insert new content
-        insert_query = f"""
-            INSERT INTO course_summary (course_id, course_name, summary_content)
-            VALUES ('{course_id}', '{course_name}', '{new_content}');
-        """
-        db.run(insert_query)
-        print(f"New summary added for course: {course_name}.")
-    else:
-        # Summary record exists but content is NULL, so update it
-        update_query = f"""
-            UPDATE course_summary
-            SET summary_content = '{new_content}'
-            WHERE course_id = '{course_id}';
-        """
-        db.run(update_query)
-        print(f"Summary updated for course: {course_name}.")
-    # else:
-    #     print(f"Summary already exists for course: {course_name}. No action needed.")
-    return {"response": new_content}
+    except Exception as e:
+        print("Database error:", e)
+    return {"answer": new_content}
+    
+# Here we will generate the final summary
+async def generate_final_summary(state: State, config: RunnableConfig):
+    print("-------- GENERATE FINAL SUMMARY --------")
+    llm = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
+    response = await _reduce(state["collapsed_summaries"], llm=llm)
+    summaries = state["collapsed_summaries"]
+    combine_summary = "\n\n".join([summary.page_content for summary in summaries])
+    combine_summary = combine_summary + f"\n\n{response}"
+    return {"answer": combine_summary}
 
 # ---- finalize response node ----
-def finalize_response(state: AgentState):
+def finalize_response(state: State):
     print("---FINALIZING THE RESPONSE---")
-    print(state["response"])
-    return {"messages": [AIMessage(content=state["response"])]}
+    print(state["answer"])
+    return {"messages": [AIMessage(content=state["answer"])]}
 
+# Construct the graph
+# Nodes:
+graph = StateGraph(State)
+graph.add_node("extract_message", extract_message)
+graph.add_node("retrieve", retrieve)
+graph.add_node("generate_summary", generate_summary)  # same as before
+graph.add_node("collect_summaries", collect_summaries)
+# graph.add_node("collapse_summaries", collapse_summaries)
+graph.add_node("generate_final_summary", generate_final_summary)
+graph.add_node("retrieve_existing", retrieve_existing)
+graph.add_node("store_summary", store_summary)
+graph.add_node("finalize_response", finalize_response)
 
-agent = StateGraph(AgentState)
-
-agent.add_node("extract_message", extract_message)
-agent.add_node("generate", generate)
-agent.add_node("retrieve_existing", retrieve_existing)
-agent.add_node("store_summary", store_summary)
-agent.add_node("finalize_response", finalize_response)
-
-agent.set_entry_point("extract_message")
-agent.add_edge("retrieve_existing", "finalize_response")
-agent.add_edge("store_summary", "finalize_response")
-agent.add_edge("finalize_response", END)
-
-agent.add_conditional_edges(
+# Edges:
+graph.add_edge(START, "extract_message")
+# graph.add_edge("extract_message", "retrieve")
+graph.add_conditional_edges(
     "extract_message",
     check_contained_summary
 )
+graph.add_conditional_edges("retrieve", map_summaries, ["generate_summary"])
+graph.add_edge("generate_summary", "collect_summaries")
+graph.add_edge("collect_summaries", "generate_final_summary")
+# graph.add_conditional_edges("collect_summaries", should_collapse)
+# graph.add_conditional_edges("collapse_summaries", should_collapse)
+# graph.add_edge("generate_final_summary", END)
+graph.add_edge("generate_final_summary", "store_summary")
+graph.add_edge("retrieve_existing", "finalize_response")
+graph.add_edge("store_summary", "finalize_response")
+graph.add_edge("finalize_response", END)
 
-agent.add_conditional_edges(
-    "generate",
-    retrieve_existing_summary
-)
-
-
-summarize_assistant = agent.compile()
-
-
-# inputs = {"messages": [("human", "The Logic Building Problems")]}
-# for output in summarize_assistant.stream(inputs):
-#     print(output)
-#     print("\n---\n")
+summarize_assistant = graph.compile()

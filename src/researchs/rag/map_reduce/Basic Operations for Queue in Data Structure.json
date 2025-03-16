@@ -1,0 +1,7 @@
+{
+    "generate_summary": {
+        "summaries": [
+            "Lesson: Basic Operations for Queue in Data Structure\n\n\u2022 **Queue Implementation**: A queue is a linear data structure that follows the FIFO (First-In-First-Out) principle, where elements are added to the end and removed from the front. This concept is crucial for understanding how queues work and how they can be implemented using various data structures.\n\u2022 **Basic Operations**: The lesson covers three basic operations that can be performed on a queue: Enqueue, Dequeue, and Peek. These operations allow users to add elements to the queue (Enqueue), remove elements from the front of the queue (Dequeue), and retrieve the element at the front without removing it (Peek).\n\u2022 **Complexity Analysis**: The time complexity for these basic operations is O(1) in the best case, where the operation is performed on an empty queue. In the worst-case scenario, when the queue is full, the Enqueue operation becomes O(n), where n is the number of elements in the queue.\n\nNote: The lesson also covers other important concepts such as Queue data structure implementation using arrays and linked lists, but the above summary focuses on the three most critical operations for a basic understanding of queues."
+        ]
+    }
+}

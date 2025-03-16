@@ -40,13 +40,15 @@ dependencies = [
     "tiktoken >=0.8.0", # python 3.13 support
     "uvicorn ~=0.32.1",
     "psycopg2>=2.9.10",
-    "fpdf>=1.7.2",
     "langchain-ollama>=0.2.1",
     "langgraph-checkpoint-postgres>=2.0.15",
     "langchain-postgres>=0.0.13",
     "pymongo[srv]==3.11",
     "jq>=1.8.0",
     "lark>=1.2.2",
+    "transformers>=4.49.0",
+    "fpdf2>=2.8.2",
+    "markdown>=3.7",
 ]
 
 [dependency-groups]

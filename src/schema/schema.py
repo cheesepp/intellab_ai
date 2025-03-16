@@ -50,6 +50,18 @@ class UserInput(BaseModel):
         default=OllamaModelName.LLAMA3_2,
         examples=[OllamaModelName.LLAMA3_2, AnthropicModelName.HAIKU_35],
     )
+    problem_title: str | None = Field(
+        description="Check whether user want to generate title from problem",
+        default=None,
+        examples=["Hello World"],
+    )
+    
+    problem_id: str | None = Field(
+        description="Post problem id to generate title",
+        default=None,
+        examples=["847c6285-8fc9-4560-a83f-4e6285809254"],
+    )
+    
     thread_id: str | None = Field(
         description="Thread ID to persist and continue a multi-turn conversation.",
         default=None,
