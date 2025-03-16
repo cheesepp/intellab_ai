@@ -69,8 +69,8 @@ RESPONSE GUIDELINES:
 2. Include examples to illustrate complex concepts
 3. Break down algorithmic approaches step-by-step
 4. Discuss time/space complexity when relevant
-5. When recommending problems, use the format: [Problem Title](https://localhost:3000/problems/problem_id)
-6. When recommending courses, use the format: [Course Title](https://localhost:3000/courses/course_id)
+5. When recommending problems, just retrieve from reference material, and use the format: [Problem Title](http://localhost:3000/problems/problem_id)
+6. When recommending courses, just retrieve from reference material, and use the format: [Course Title](http://localhost:3000/course/course_id)
 7. Only recommend courses mentioned in the provided context
 8. If you cannot answer based on the provided materials, acknowledge this clearly
 
@@ -83,7 +83,7 @@ embeddings = OllamaEmbeddings(
 )
 # Create an index using the loaded documents
 index_creator = VectorstoreIndexCreator(embedding=embeddings)
-docsearch = index_creator.from_loaders([loader, problem_loader])
+docsearch = index_creator.from_loaders([problem_loader, loader])
 prompt = ChatPromptTemplate.from_template(template)
 
 # Define the logic to call the model
@@ -171,19 +171,20 @@ async def llama_guard_output(state: State, config: RunnableConfig) -> State:
     # llama_guard = LlamaGuard()
     # safety_output = await llama_guard.ainvoke("User", state["messages"])
     # return {"output_safety": safety_output}
-    checking_template = """You are an expert at determining whether an input question is relevant to programming or not. 
-    
-    User question: {question}
-    Your task is to:
-    1. Analyze the question carefully
-    2. Determine if it's relevant to programming topics (languages, algorithms, development, computer science, software engineering, etc.)
-    3. Provide a clear, binary response
+    checking_template = """You are an expert at determining whether an input is relevant to programming or casual conversation that should be allowed in a programming-focused chatbot.
 
-    For each question, respond with:
+    User input: {question}
+
+    Your task is to:
+    1. Analyze the input carefully
+    2. Determine if it's relevant to programming topics OR is appropriate casual conversation
+    3. Provide a clear response
+
+    For each input, respond with:
     - FIRST LINE: Either "relevant" or "irrelevant" (lowercase, no additional words)
     - SECOND LINE: A brief explanation of your decision
 
-    Programming-relevant questions include:
+    Classify as RELEVANT:
     - Programming languages and their features
     - Algorithms and data structures
     - Software development practices
@@ -191,6 +192,11 @@ async def llama_guard_output(state: State, config: RunnableConfig) -> State:
     - Coding problems and their solutions
     - System design and architecture
     - Development tools and environments
+    - Questions about programming courses or learning resources
+    - Greetings and casual conversation starters (like "Hi", "How are you?", "Good morning")
+    - Follow-up questions that might appear irrelevant in isolation but are likely part of a programming conversation
+    - Questions about career advice in programming/software development
+    - Any ambiguous question that could reasonably relate to programming
 
     Examples:
     Input: "How do I implement a binary search in Python?"
@@ -198,17 +204,25 @@ async def llama_guard_output(state: State, config: RunnableConfig) -> State:
     relevant
     This question directly relates to implementing an algorithm in a programming language.
 
+    Input: "Hi there! Can you help me with some coding questions?"
+    Output:
+    relevant
+    This is a greeting and conversation starter appropriate for a programming-focused chatbot.
+
     Input: "What's the best recipe for chocolate chip cookies?"
     Output:
     irrelevant
     This question is about cooking/baking and has no connection to programming.
 
-    Input: "Can you explain the Singleton pattern in Java?"
+    Input: "Can you recommend some resources for learning React?"
     Output:
     relevant
-    This question concerns a design pattern used in object-oriented programming.
+    This question is about learning resources for a programming framework.
 
-    Keep your responses concise and focused solely on the relevance determination."""
+    Input: "What do you think about politics today?"
+    Output:
+    irrelevant
+    This question is about politics and not related to programming."""
     
     prompt = ChatPromptTemplate.from_template(checking_template)
     model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))

@@ -56,7 +56,7 @@ async def message_generator(
     kwargs, run_id, thread_id = _parse_input(user_input)
     timestamp = datetime.now().isoformat()
     
-    is_relevant = False
+    # is_relevant = False
     
     if agent_id == "title_generator":
         fake_thread_id = uuid4()
@@ -69,16 +69,14 @@ async def message_generator(
     }
     # Process streamed events from the graph and yield messages over the SSE stream.
     async for event in agent.astream_events(**kwargs, version="v2"):
-        print(f'================ IS RELEVANT {is_relevant} ==============')
+        # print(f'================ IS RELEVANT {is_relevant} ==============')
         if not event:
             continue
         # Check if event["metadata"] is a string and convert it to a dictionary
         metadata_dict = event["metadata"]
-        # print("================ DATA ===============")
-        print(event)
-        if "langgraph_node" in metadata_dict and metadata_dict["langgraph_node"] == "guard_output":
-            print("================ GUARD OUTPUT ===============")
-            print(event)
+        # if "langgraph_node" in metadata_dict and metadata_dict["langgraph_node"] == "guard_output":
+        #     print("================ GUARD OUTPUT ===============")
+        #     print(event)
         if "langgraph_node" in metadata_dict and metadata_dict["langgraph_node"] == "summarize_conversation":
             continue
         new_messages = []
@@ -129,26 +127,27 @@ async def message_generator(
             print(message)
             yield f"data: {json.dumps({'type': 'message', 'content': chat_message.model_dump()})}\n\n"
         
-        if (event["event"] == "on_chat_model_stream"
-            and "langgraph_node" in metadata_dict 
-            and  metadata_dict["langgraph_node"] == "guard_output"):
-            if isinstance(event["data"]["chunk"], AIMessage):
-                print(f'---------- MATCH CONDITION GUARD OUTPUT {event["data"]["chunk"]}')
-                if  re.search(r' relevant', event["data"]["chunk"].content, re.IGNORECASE):
+        # if (event["event"] == "on_chat_model_stream"
+        #     and "langgraph_node" in metadata_dict 
+        #     and  metadata_dict["langgraph_node"] == "guard_output"):
+        #     if isinstance(event["data"]["chunk"], AIMessage):
+        #         print(f'---------- MATCH CONDITION GUARD OUTPUT {event["data"]["chunk"]}')
+        #         if  re.search(r' relevant', event["data"]["chunk"].content, re.IGNORECASE):
             
-                    is_relevant = True
-                    print(f'---------- MATCH CONDITION {event["data"]["chunk"]}')
-                else:
-                    print(f'---------- DO NOT MATCH CONDITION {event["data"]["chunk"]}')
-        if "langgraph_node" in metadata_dict and metadata_dict["langgraph_node"] == "guard_output" and is_relevant:
-            print(f'------------ COME HERE {event} ------------')
-            continue
+        #             is_relevant = True
+        #             print(f'---------- MATCH CONDITION {event["data"]["chunk"]}')
+        #         else:
+        #             print(f'---------- DO NOT MATCH CONDITION {event["data"]["chunk"]}')
+        # if "langgraph_node" in metadata_dict and metadata_dict["langgraph_node"] == "guard_output" and is_relevant:
+        #     print(f'------------ COME HERE {event} ------------')
+        #     continue
             
         # Yield tokens streamed from LLMs.
         if (
             event["event"] == "on_chat_model_stream"
             and user_input.stream_tokens
             and "llama_guard" not in event.get("tags", [])
+            and metadata_dict["langgraph_node"] != "guard_output"
         ):
             
             print(event)
