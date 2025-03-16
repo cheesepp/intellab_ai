@@ -1,0 +1,6 @@
+
+python -m venv .venv
+pip install uv
+.venv\Scripts\activate
+uv sync --frozen
+python ./src/run_service.py
