@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated, Any, List
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, status, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from langchain_core._api import LangChainBetaWarning
@@ -111,7 +111,15 @@ router.include_router(invoking_router)
 router.include_router(history_router)
 
 @router.get("/info")
-async def info() -> ServiceMetadata:
+async def info(request: Request) -> ServiceMetadata:
+    # Extract the X-UserRole header
+    user_role_header = request.headers.get("X-UserRole", "")
+    print(f"User Role Header: {user_role_header}")
+    user_role, premium_plan = user_role_header.split(",") if user_role_header else ("", "")
+
+    # Log the extracted values
+    print(f"User Role: {user_role}, Premium Plan: {premium_plan}")
+
     models = list(settings.AVAILABLE_MODELS)
     models.sort()
     return ServiceMetadata(

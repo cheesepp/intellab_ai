@@ -21,6 +21,7 @@ class OllamaModelName(StrEnum):
     MISTRAL = "mistral"
     DEEPSEEK_R1_1_5B = "deepseek-r1:1.5b"
     DEEPSEEK_R1_8B = "deepseek-r1:8b"
+    DEEPSEEK_CODER_V2   = "deepseek-coder-v2"
 
 class OpenAIModelName(StrEnum):
     """https://platform.openai.com/docs/models/gpt-4o"""
