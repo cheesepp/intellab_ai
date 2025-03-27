@@ -1,4 +1,5 @@
 import os
+from langchain_openai import ChatOpenAI
 from langgraph.graph import END, MessagesState, StateGraph
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
@@ -65,8 +66,9 @@ class RouteQuery(BaseModel):
 
 async def route_query(state: AgentState, config:RunnableConfig) -> Literal["model", "solver", "reviewer"]:
   
-#   llm = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-  llm = ChatOllama(model="llama3.2", base_url=OLLAMA_HOST)
+  # llm = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
+  # llm = ChatOllama(model="llama3.2", base_url=OLLAMA_HOST)
+  llm = ChatOpenAI(model="google/gemini-2.0-flash-001", base_url=os.getenv("OPENROUTER_BASE"))
   
   ROUTE_QUERY_PROMPT = ChatPromptTemplate.from_template(prompt_manager.PROBLEM_ROUTE_TEMPLATE)
   
@@ -98,13 +100,16 @@ async def solver(state: AgentState, config: RunnableConfig):
   problem = state["problem"]
   question = state["question"]
   summary = state.get("summary","")
+  print(f"=========== SOLVER CHATBOT {summary} ===========")
   if summary:
     system_message = f"Summary of conversation earlier: {summary}"
     messages = [SystemMessage(content=system_message)] + state["messages"]
   else:
     messages = state["messages"]
-        
+  m_as_string = "\n\n".join([message.content for message in messages])     
   solver_model = {
+        "conversation": RunnableLambda(lambda _: m_as_string),
+        # "summary": RunnableLambda(lambda _: summary),
         "problem": RunnableLambda(lambda _: problem),
         "question": RunnableLambda(lambda _: question),
       } | solver_prompt | llm
@@ -134,8 +139,9 @@ async def reviewer(state: AgentState, config: RunnableConfig):
     messages = [SystemMessage(content=system_message)] + state["messages"]
   else:
     messages = state["messages"]
-        
+  m_as_string = "\n\n".join([message.content for message in messages])    
   reviewer_model = {
+        "conversation": RunnableLambda(lambda _: m_as_string),
         "problem": RunnableLambda(lambda _: problem),
         "question": RunnableLambda(lambda _: question),
       } | reviewer_prompt | llm
@@ -179,6 +185,7 @@ async def acall_model(state: AgentState, config: RunnableConfig):
         messages = state["messages"]
     m_as_string = "\n\n".join([message.content for message in messages])
     normal_chatbot = {
+        "conversation": RunnableLambda(lambda _: m_as_string),
         "problem": RunnableLambda(lambda _: problem),
         "question": RunnableLambda(lambda _: question),
       } | prompt | model
@@ -190,15 +197,15 @@ def should_continue(state: AgentState) -> Literal["summarize_conversation", END]
     """Return the next node to execute."""
     messages = state["messages"]
     # If there are more than six messages, then we summarize the conversation
-    if len(messages) > 6:
+    if len(messages) > 10:
         return "summarize_conversation"
     # Otherwise we can just end
     return END
 
 async def summarize_conversation(state: AgentState, config: RunnableConfig):
     print(f"------- SUMMARIZE CONVERSATION ----------")
-    # model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    model = ChatOllama(model="llama3.2", base_url=OLLAMA_HOST)
+    model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
+    # model = ChatOllama(model="llama3.2", base_url=OLLAMA_HOST)
     # First, we summarize the conversation
     summary = state.get("summary", "")
     if summary:
@@ -207,12 +214,6 @@ async def summarize_conversation(state: AgentState, config: RunnableConfig):
         summary_message = (
             f"This is summary of the conversation to date: {summary}\n\n"
             """
-            Focus on:
-            1. The main programming concepts discussed
-            2. Key advice or strategies provided
-            3. Important questions raised
-            4. Any conclusions or next steps
-
             Keep the summary clear, informative, and focused on the technical content.
             """
         )
@@ -223,7 +224,7 @@ async def summarize_conversation(state: AgentState, config: RunnableConfig):
     response = await model.ainvoke(summary_messages)
     # We now need to delete messages that we no longer want to show up
     # I will delete all but the last two messages, but you can change this
-    delete_messages = [RemoveMessage(id=m.id) for m in state["messages"][:-2]]
+    delete_messages = [RemoveMessage(id=m.id) for m in state["messages"][:-4]]
     return {"summary": response.content, "messages": delete_messages}
   
 # Define the graph
