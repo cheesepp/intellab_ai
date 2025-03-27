@@ -380,7 +380,7 @@ async def get_current_usage(user_id: str, subscription_plan: str = 'free') -> di
     # Reset after 1 day
     # if datetime.now() - last_reset > timedelta(days=1):
     #     remaining_usage = user_data.get("max_usage", 0)
-    unlimited: bool = subscription_plan == PREMIUM_PLAN or subscription_plan == PREMIUM_PLAN
+    unlimited: bool = subscription_plan == PREMIUM_PLAN or subscription_plan == PROBLEM_PLAN
     return {
         "remaining_usage": remaining_usage,
         "last_reset": last_reset,

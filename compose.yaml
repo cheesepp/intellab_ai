@@ -10,7 +10,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.service
     ports:
-      - "8006:80"
+      - "8006:8006"
     env_file:
       - .env
     develop:
