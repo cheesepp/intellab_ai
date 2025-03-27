@@ -32,10 +32,14 @@ _MODEL_TABLE = {
     OllamaModelName.DEEPSEEK_CODER_V2: "deepseek-coder-v2",
     OpenAIModelName.GPT_4O_MINI: "gpt-4o-mini",
     OpenAIModelName.GPT_4O: "gpt-4o",
+    OpenAIModelName.ChatGPT_4O: "openai/chatgpt-4o-latest",
+    OpenAIModelName.GEMINI_25_PRO: "google/gemini-2.5-pro-exp-03-25:free",
+    OpenAIModelName.LEARNLM_15_PRO: "google/learnlm-1.5-pro-experimental:free",
     AnthropicModelName.HAIKU_3: "claude-3-haiku-20240307",
     AnthropicModelName.HAIKU_35: "claude-3-5-haiku-latest",
     AnthropicModelName.SONNET_35: "claude-3-5-sonnet-latest",
     GoogleModelName.GEMINI_15_FLASH: "gemini-1.5-flash",
+    # GoogleModelName.GEMINI_25_PRO: "gemini-2.5-pro",
     GroqModelName.LLAMA_31_8B: "llama-3.1-8b-instant",
     GroqModelName.LLAMA_33_70B: "llama-3.3-70b-versatile",
     GroqModelName.LLAMA_GUARD_3_8B: "llama-guard-3-8b",
@@ -57,7 +61,8 @@ def get_model(model_name: AllModelEnum, /) -> ModelT:
     if model_name in OllamaModelName:
         return ChatOllama(model=model_name, streaming=True, base_url=os.getenv("OLLAMA_HOST"))
     if model_name in OpenAIModelName:
-        return ChatOpenAI(model=api_model_name, temperature=0.5, streaming=True)
+        print(f'============ MODEL NAME {model_name}, {api_model_name}')
+        return ChatOpenAI(model=api_model_name, temperature=0.5, streaming=True, base_url=os.getenv("OPENROUTER_BASE"))
     if model_name in AnthropicModelName:
         return ChatAnthropic(model=api_model_name, temperature=0.5, streaming=True)
     if model_name in GoogleModelName:

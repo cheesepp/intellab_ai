@@ -25,9 +25,11 @@ class OllamaModelName(StrEnum):
 
 class OpenAIModelName(StrEnum):
     """https://platform.openai.com/docs/models/gpt-4o"""
-
+    LEARNLM_15_PRO = "learnlm-1.5-pro"
+    GEMINI_25_PRO = "gemini-2.5-pro"
     GPT_4O_MINI = "gpt-4o-mini"
     GPT_4O = "gpt-4o"
+    ChatGPT_4O = "chatgpt-4o"
 
 
 class AnthropicModelName(StrEnum):
@@ -40,7 +42,7 @@ class AnthropicModelName(StrEnum):
 
 class GoogleModelName(StrEnum):
     """https://ai.google.dev/gemini-api/docs/models/gemini"""
-
+    # GEMINI_25_PRO = "gemini-2.5-pro"
     GEMINI_15_FLASH = "gemini-1.5-flash"
 
 
