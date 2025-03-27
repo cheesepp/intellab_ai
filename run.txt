@@ -4,3 +4,5 @@ pip install uv
 .venv\Scripts\activate
 uv sync --frozen
 python ./src/run_service.py
+python ./run_service.py
+python ./run_service.py -p 8006

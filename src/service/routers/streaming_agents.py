@@ -8,7 +8,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 from uuid import uuid4
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from langchain_core._api import LangChainBetaWarning
 from langchain_core.messages import AnyMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
@@ -30,6 +30,7 @@ from langchain_core.messages import (
 from service.utils import (
     _parse_input,
     convert_message_content_to_string,
+    get_current_usage,
     langchain_to_chat_message,
     remove_tool_calls,
     save_to_pdf,
@@ -40,12 +41,36 @@ from service.utils import (
 )
 from agents.global_chatbot import workflow
 from fpdf import FPDF
+from enum import Enum
+import sys
 
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 logger = logging.getLogger(__name__)
 
+# Define constants for subscription plans
+FREE_PLAN = "free"
+PREMIUM_PLAN = "premium plan"
+COURSE_PLAN = "course plan"
+PROBLEM_PLAN = "problem plan"
+
+# CONSTANTS OF CHATBOT AGENTS
+GLOBAL_CHATBOT = "global_chatbot"
+PROBLEM_CHATBOT = "problem_chatbot"
+
+LIST_HIGH_COST_MODELS = ["claude-3-haiku", "bedrock-3.5-haiku", "gpt-4o-mini"]
+
+def max_usage_problem_chatbot_per_plan(argument):
+    switcher = {
+        "free": 7,
+        "problem plan": sys.maxsize,
+        "course plan": 20,
+        "premium plan": sys.maxsize,
+    }
+
+    return switcher.get(argument, 7)
+
 async def message_generator(
-    user_input: StreamInput, agent_id: str = DEFAULT_AGENT
+    request: Request, user_input: StreamInput, agent_id: str = DEFAULT_AGENT
 ) -> AsyncGenerator[str, None]:
     """
     Generate a stream of messages from the agent.
@@ -55,8 +80,37 @@ async def message_generator(
     agent: CompiledStateGraph = get_agent(agent_id)
     kwargs, run_id, thread_id = _parse_input(user_input)
     timestamp = datetime.now().isoformat()
-    
     # is_relevant = False
+
+    # Extract the X-UserRole header
+    user_role_header = request.headers.get("X-UserRole", "")
+    user_role, subscription_plan = user_role_header.split(",") if user_role_header else ("", "")
+
+    # get user role and premium plan here
+    print(f"User Role: {user_role}, Premium Plan: {subscription_plan}")
+    print(f"Agent ID: {agent_id}")
+    print(f"is free plan: {subscription_plan == FREE_PLAN}")
+
+    if (agent_id == GLOBAL_CHATBOT or agent_id == PROBLEM_CHATBOT) and (subscription_plan is None or subscription_plan == ""):
+        yield f"data: {json.dumps({'type': 'error', 'content': 'Please login to continue.'})}\n\n"
+        return
+
+    # check if user has permission to access high cost models
+    if (agent_id==GLOBAL_CHATBOT or agent_id==PROBLEM_CHATBOT) and subscription_plan == FREE_PLAN and (user_input.model in LIST_HIGH_COST_MODELS):
+        yield f"data: {json.dumps({'type': 'error', 'content': 'User does not have permission to access this agent. Please upgrade to premium plan.'})}\n\n"
+        return
+    
+    # check quote if user is using free or course plan
+    try:
+        current_usage_dict =  await get_current_usage(user_input.user_id, subscription_plan)
+        remaining_usage = current_usage_dict["remaining_usage"]
+    except Exception as e:
+        print(f"Error: {e}")
+        remaining_usage = max_usage_problem_chatbot_per_plan(subscription_plan)
+
+    if (subscription_plan == FREE_PLAN or subscription_plan==COURSE_PLAN) and remaining_usage <= 0:
+        yield f"data: {json.dumps({'type': 'error', 'content': 'Usage limit exceeded for today. Please upgrade your plan or try on next day.'})}\n\n"
+        return
     
     if agent_id == "title_generator":
         fake_thread_id = uuid4()
@@ -110,7 +164,8 @@ async def message_generator(
                 await store_chat_history(user_input, chat_message, thread_id, timestamp)
             if agent_id == "problem_chatbot":
                 print("STORE PROBLEM CHAT")
-                await store_problem_chat_history(user_input, chat_message, thread_id, timestamp)
+                max_usage = max_usage_problem_chatbot_per_plan(subscription_plan)
+                await store_problem_chat_history(user_input, chat_message, thread_id, timestamp, max_usage)
             elif agent_id == "title_generator":
                 if user_input.problem_title == "1":
                     await store_problem_title(user_input, chat_message.content, thread_id)
@@ -261,7 +316,51 @@ async def stream(request: Request, user_input: StreamInput) -> StreamingResponse
     agent_id = request.url.path.split("/")[-1]  
     if (agent_id == "invoke"):
         agent_id = DEFAULT_AGENT
-    return StreamingResponse(
-        message_generator(user_input, agent_id),
-        media_type="text/event-stream",
-    )
+    try:
+        return StreamingResponse(
+            message_generator(request, user_input, agent_id),
+            media_type="text/event-stream",
+        )
+    except HTTPException as e:
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"detail": e.detail},
+        )
+    
+@router.get("/problem_chatbot/usage", tags=["Problem Chatbot"], description="""
+    Get the current usage for the problem chatbot.
+    Request header: pass access token
+    Response format:
+    {
+        "max_usage": <max_usage>,
+        "remaining_usage": <remaining_usage>,
+        "last_reset": <last_reset>,
+        "unlimited": <unlimited>
+    }
+            """)
+
+async def get_usage(request: Request) -> dict:
+    # Extract the X-UserRole header
+    user_role_header = request.headers.get("X-UserRole", "")
+    print(f"User Role Header: {user_role_header}")
+    user_role, premium_plan = user_role_header.split(",") if user_role_header else ("", "")
+
+    user_id_header = request.headers.get("X-UserId", "")
+    print(f"User ID Header: {user_id_header}")
+    # Log the extracted values
+    print(f"User Role: {user_role}, Premium Plan: {premium_plan}")
+
+    try:
+        result = await get_current_usage(user_id_header, premium_plan)
+        return result
+    except Exception as e:
+        print(f"Error: {e}")
+        max_usage = max_usage_problem_chatbot_per_plan(premium_plan)
+        unlimited: bool = premium_plan == PREMIUM_PLAN or premium_plan == PREMIUM_PLAN
+        return {
+            "remaining_usage": max_usage,
+            "last_reset": datetime.now(),
+            "max_usage": max_usage,
+            "unlimited": unlimited,
+        }
+

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import re
 from fastapi import HTTPException
@@ -21,6 +21,7 @@ from typing import Annotated, Any, List
 
 import re
 from fpdf import FPDF
+import sys
 
 def _parse_input(user_input: UserInput) -> tuple[dict[str, Any], UUID, UUID]:
     run_id = uuid4()
@@ -170,7 +171,7 @@ async def store_chat_history(user_input: UserInput, ai_output: ChatMessage, thre
                     print({"message": "New conversation created", "thread_id": thread_id})   
             else:
                 raise HTTPException(status_code=500, detail="Internal Server Error")
-        
+
         else:
             print("ADD NEW USER TO DATABASE")
             # User does not exist -> Create a new user document
@@ -211,8 +212,25 @@ def extract_message(message):
 
 
 
-# ==================== UTILS FOR PROBLEM CHATBOT ======================    
-async def store_problem_chat_history(user_input: UserInput, ai_output: ChatMessage, thread_id: UUID, timestamp: str):
+# ==================== UTILS FOR PROBLEM CHATBOT ======================   
+
+MAX_USAGE_FREE_PLAN = 7
+FREE = "free"
+COURSE_PLAN = "course plan"
+PROBLEM_PLAN = "problem plan"
+PREMIUM_PLAN = "premium plan"
+
+def max_usage_problem_chatbot_per_plan(argument):
+    switcher = {
+        "free": 7,
+        "problem plan": sys.maxsize,
+        "course plan": 20,
+        "premium plan": sys.maxsize,
+    }
+    
+    return switcher.get(argument, MAX_USAGE_FREE_PLAN)
+
+async def store_problem_chat_history(user_input: UserInput, ai_output: ChatMessage, thread_id: UUID, timestamp: str, max_usage: int = MAX_USAGE_FREE_PLAN):
     
     user_id = user_input.user_id
     thread_id = thread_id
@@ -284,6 +302,39 @@ async def store_problem_chat_history(user_input: UserInput, ai_output: ChatMessa
                 print({"message": "New conversation created", "thread_id": thread_id})   
         else:
             raise HTTPException(status_code=500, detail="Internal Server Error")
+        
+            
+        # Update remaining_usage
+        if "remaining_usage" in user_data:
+            remaining_usage = user_data["remaining_usage"]
+            last_reset = user_data.get("last_reset", datetime.min)
+
+            # reset usage after 1 day
+            # if datetime.now() - last_reset > timedelta(days=1):
+            #     remaining_usage = max_usage
+            #     last_reset = datetime.now()
+
+            # reset usage at midnight
+            current_date = datetime.now().date()
+            last_reset_date = last_reset.date()
+            if current_date > last_reset_date:
+                remaining_usage = max_usage
+                last_reset = datetime.now()
+
+            if remaining_usage > 0:
+                remaining_usage -= 1
+            else:
+                raise HTTPException(status_code=403, detail="Usage limit exceeded for today. Please upgrade your plan or try on next day.")
+            problem_chatbot_collection.update_one(
+                {"user_id": user_id},
+                {"$set": {"remaining_usage": remaining_usage, "max_usage": max_usage, "last_reset": last_reset}}
+            )
+        else:
+            global_chatbot_collection.update_one(
+                {"user_id": user_id},
+                {"$set": {"remaining_usage": max_usage - 1, "max_usage": max_usage, "last_reset": datetime.now()}}
+            )
+
 
     else:
         print("ADD NEW USER TO DATABASE")
@@ -297,11 +348,45 @@ async def store_problem_chat_history(user_input: UserInput, ai_output: ChatMessa
                     "timestamp": timestamp,
                     "messages": [user_entry, ai_entry]
                 }
-            ]
+            ],
+            "max_usage": max_usage,
+            "remaining_usage": max_usage - 1,
+            "last_reset": datetime.now()
         }
 
         problem_chatbot_collection.insert_one(new_user)
         print({"message": "New user created and conversation started", "thread_id": thread_id, "problem_id": problem_id})
+
+
+async def get_current_usage(user_id: str, subscription_plan: str = 'free') -> dict:
+    user_data = problem_chatbot_collection.find_one({"user_id": user_id})
+    if not user_data:
+        raise HTTPException(status_code=404, detail="User not found in database")
+    
+    remaining_usage = user_data.get("remaining_usage", 0)
+    last_reset = user_data.get("last_reset", datetime.min)
+
+    # Determine max_usage based on subscription_plan
+    max_usage = max_usage_problem_chatbot_per_plan(subscription_plan)
+
+
+    # reset usage at midnight
+    # Check if the current date is different from the last reset date
+    current_date = datetime.now().date()
+    last_reset_date = last_reset.date()
+    if current_date > last_reset_date:
+        remaining_usage = max_usage #user_data.get("max_usage", 0)
+
+    # Reset after 1 day
+    # if datetime.now() - last_reset > timedelta(days=1):
+    #     remaining_usage = user_data.get("max_usage", 0)
+    unlimited: bool = subscription_plan == PREMIUM_PLAN or subscription_plan == PREMIUM_PLAN
+    return {
+        "remaining_usage": remaining_usage,
+        "last_reset": last_reset,
+        "max_usage": max_usage,
+        "unlimited": unlimited,
+    }
 
 # ==================== UTILS FOR TITLE GENERATOR AGENT ===================
 async def store_title(user_input: UserInput, output: str, thread_id: str):
