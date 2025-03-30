@@ -48,10 +48,11 @@ warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 logger = logging.getLogger(__name__)
 
 # Define constants for subscription plans
+MAX_USAGE_FREE_PLAN = 7
 FREE_PLAN = "free"
-PREMIUM_PLAN = "premium plan"
-COURSE_PLAN = "course plan"
-PROBLEM_PLAN = "problem plan"
+PREMIUM_PLAN = "PREMIUM_PLAN"
+COURSE_PLAN = "COURSE_PLAN"
+ALGORITHM_PLAN = "ALGORITHM_PLAN"
 
 # CONSTANTS OF CHATBOT AGENTS
 GLOBAL_CHATBOT = "global_chatbot"
@@ -62,12 +63,12 @@ LIST_HIGH_COST_MODELS = ["claude-3-haiku", "bedrock-3.5-haiku", "gpt-4o-mini"]
 def max_usage_problem_chatbot_per_plan(argument):
     switcher = {
         "free": 7,
-        "problem plan": sys.maxsize,
-        "course plan": 20,
-        "premium plan": sys.maxsize,
+        "ALGORITHM_PLAN": sys.maxsize,
+        "COURSE_PLAN": 20,
+        "PREMIUM_PLAN": sys.maxsize,
     }
 
-    return switcher.get(argument, 7)
+    return switcher.get(argument, MAX_USAGE_FREE_PLAN)
 
 async def message_generator(
     request: Request, user_input: StreamInput, agent_id: str = DEFAULT_AGENT
