@@ -215,17 +215,17 @@ def extract_message(message):
 # ==================== UTILS FOR PROBLEM CHATBOT ======================   
 
 MAX_USAGE_FREE_PLAN = 7
-FREE = "free"
-COURSE_PLAN = "course plan"
-PROBLEM_PLAN = "problem plan"
-PREMIUM_PLAN = "premium plan"
+FREE_PLAN = "free"
+PREMIUM_PLAN = "PREMIUM_PLAN"
+COURSE_PLAN = "COURSE_PLAN"
+ALGORITHM_PLAN = "ALGORITHM_PLAN"
 
 def max_usage_problem_chatbot_per_plan(argument):
     switcher = {
         "free": 7,
-        "problem plan": sys.maxsize,
-        "course plan": 20,
-        "premium plan": sys.maxsize,
+        "ALGORITHM_PLAN": sys.maxsize,
+        "COURSE_PLAN": 20,
+        "PREMIUM_PLAN": sys.maxsize,
     }
     
     return switcher.get(argument, MAX_USAGE_FREE_PLAN)
@@ -380,7 +380,7 @@ async def get_current_usage(user_id: str, subscription_plan: str = 'free') -> di
     # Reset after 1 day
     # if datetime.now() - last_reset > timedelta(days=1):
     #     remaining_usage = user_data.get("max_usage", 0)
-    unlimited: bool = subscription_plan == PREMIUM_PLAN or subscription_plan == PROBLEM_PLAN
+    unlimited: bool = subscription_plan == PREMIUM_PLAN or subscription_plan == ALGORITHM_PLAN
     return {
         "remaining_usage": remaining_usage,
         "last_reset": last_reset,
