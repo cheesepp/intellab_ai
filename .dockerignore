@@ -9,4 +9,6 @@ __pycache__
 env
 venv
 .venv
+docker.env
+sample.env
 *.db
