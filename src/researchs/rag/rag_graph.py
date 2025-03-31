@@ -95,6 +95,6 @@ def generate(state: State):
     return {"answer": response.content}
 
 
-graph_builder = StateGraph(State).add_sequence([extract_course_info, retrieve, generate])
+graph_builder = StateGraph(State).add_sequence([extract_message, retrieve, generate])
 graph_builder.add_edge(START, "extract_course_info")
 graph = graph_builder.compile()

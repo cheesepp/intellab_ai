@@ -32,6 +32,8 @@ from core.llm import get_model
 
 DB_CONNECTION_STRING = os.getenv("DB_CONNECTION_STRING")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST")
+# DB_CONNECTION_STRING = "postgresql://postgres:123456@localhost:5433/intellab-db"
+# OLLAMA_HOST="http://localhost:11434"
 
 def create_embeddings():
     ''' Function to create vector embeddings '''

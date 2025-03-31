@@ -11,7 +11,7 @@ from agents.summarize_agent import summarize_assistant
 from agents.title_generator import title_generator
 from schema import AgentInfo
 
-DEFAULT_AGENT = "summarize-assistant"
+DEFAULT_AGENT = "summarize_assistant"
 
 
 @dataclass

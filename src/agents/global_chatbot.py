@@ -8,7 +8,7 @@ from langchain_core.runnables import (
     RunnableConfig,
 )
 from langchain_core.prompts import ChatPromptTemplate
-from typing import Literal, Annotated, TypedDict
+from typing import List, Literal, Annotated, TypedDict
 from langchain_core.messages import SystemMessage, RemoveMessage
 from langchain_postgres import PGVector
 from langgraph.graph import StateGraph, START, END, add_messages
@@ -23,8 +23,14 @@ from langchain_core.messages import AIMessage, SystemMessage
 from agents.llama_guard import LlamaGuard, LlamaGuardOutput, SafetyAssessment, parse_llama_guard_output, parse_llama_guard_relevant_topic
 from core import settings
 from core.llm import get_model
+from langchain_core.vectorstores import VectorStoreRetriever
+from langchain_core.runnables import RunnableParallel
+from langchain_core.documents import Document
 
 DB_CONNECTION_STRING = os.getenv("DB_CONNECTION_STRING")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST")
+# DB_CONNECTION_STRING = "postgresql://postgres:123456@localhost:5433/intellab-db"
+# OLLAMA_HOST="http://localhost:11434"
 
 connection_kwargs = {
     "autocommit": True,
@@ -38,6 +44,8 @@ class State(TypedDict):
     summary: str
     safety: LlamaGuardOutput
     is_relevant: LlamaGuardOutput
+    courses_retriever: List[Document]
+    problems_retriever: List[Document]
 # We will use this model for both the conversation and the summarization
 # model = ChatOllama(model="llama3.2")
 
@@ -62,7 +70,8 @@ QUESTION
 {question}
 
 REFERENCE MATERIALS
-{context}
+Courses: {courses}
+Problems: {problems}
 
 RESPONSE GUIDELINES:
 1. Provide comprehensive explanations that build fundamental understanding
@@ -76,15 +85,27 @@ RESPONSE GUIDELINES:
 
 Answer directly without phrases like "Based on the context" or "According to the materials."""
 
-loader = CSVLoader(file_path='./documents/courses.csv')
-problem_loader = CSVLoader(file_path='./documents/problems.csv')
+# loader = CSVLoader(file_path='./documents/courses.csv')
+# problem_loader = CSVLoader(file_path='./documents/problems.csv')
 embeddings = OllamaEmbeddings(
     model="nomic-embed-text",
+    base_url=OLLAMA_HOST
 )
 # Create an index using the loaded documents
 index_creator = VectorstoreIndexCreator(embedding=embeddings)
-docsearch = index_creator.from_loaders([problem_loader, loader])
+# docsearch = index_creator.from_loaders([problem_loader, loader])
 prompt = ChatPromptTemplate.from_template(template)
+# course_vectorstore = PGVector(embeddings=embeddings, collection_name="courses", connection=DB_CONNECTION_STRING, use_jsonb=True, )
+# problem_vectorstore = PGVector(embeddings=embeddings, collection_name="problems", connection=engine, use_jsonb=True)
+async def retrieve_vectordb(state: State):
+    course_vectorstore = PGVector(embeddings=embeddings, collection_name="courses", connection=DB_CONNECTION_STRING, use_jsonb=True, )
+    problem_vectorstore = PGVector(embeddings=embeddings, collection_name="problems", connection=DB_CONNECTION_STRING, use_jsonb=True)
+    course_retriever = course_vectorstore.as_retriever()
+    problem_retriever = problem_vectorstore.as_retriever()
+    message = state["messages"][-1].content
+    course_docs = course_retriever.invoke(message)
+    problem_docs = problem_retriever.invoke(message)
+    return {"courses_retriever": course_docs, "problems_retriever": problem_docs}
 
 # Define the logic to call the model
 async def acall_model(state: State, config: RunnableConfig):
@@ -99,9 +120,13 @@ async def acall_model(state: State, config: RunnableConfig):
         messages = state["messages"]
     # print(f"--------- {messages}-----------")
     m_as_string = "\n\n".join([message.content for message in messages])
+    courses_context = state["courses_retriever"]
+    problems_context = state["problems_retriever"]
     qa_chain = (
+        # RunnableParallel(courses=courses_context, problems=problems_context) |
         {
-            "context": docsearch.vectorstore.as_retriever(),
+            "courses": RunnableLambda(lambda _: courses_context),
+            "problems": RunnableLambda(lambda _: problems_context),
             "summary": RunnableLambda(lambda _: summary),
             "conversation": RunnableLambda(lambda _: m_as_string),
             "question": RunnableLambda(lambda _: messages[-1].content)
@@ -111,8 +136,8 @@ async def acall_model(state: State, config: RunnableConfig):
         # | StrOutputParser()
     )
     
-    # print(f"------- doc search {docsearch.vectorstore.as_retriever()} ----------")
-    response = await qa_chain.ainvoke(messages[-1].content)
+    print(f"------- doc search {courses_context} ----------")
+    response = await qa_chain.ainvoke(messages[-1].content, config)
     # response = model.invoke(messages)
     # We return a list, because this will get added to the existing list
     return {"messages": [response]}
@@ -264,6 +289,7 @@ def check_safety(state: State) -> Literal["unsafe", "safe"]:
 workflow = StateGraph(State)
 
 # Define the conversation node and the summarize node
+workflow.add_node("retrieval", retrieve_vectordb)
 workflow.add_node("conversation", acall_model)
 # workflow.add_node("normal_conversation", normal_conversation)
 workflow.add_node(summarize_conversation)
@@ -291,11 +317,10 @@ workflow.add_conditional_edges(
 )
 
 workflow.add_conditional_edges(
-    "guard_output", check_is_relevant, {"irrelevant": "block_unsafe_output_content", "relevant": "conversation" }
+    "guard_output", check_is_relevant, {"irrelevant": "block_unsafe_output_content", "relevant": "retrieval" }
 )
 
-# We now add a normal edge from `summarize_conversation` to END.
-# This means that after `summarize_conversation` is called, we end.
+workflow.add_edge("retrieval", "conversation")
 workflow.add_edge("summarize_conversation", END)
 # Always END after blocking unsafe content
 workflow.add_edge("block_unsafe_content", END)

@@ -89,7 +89,16 @@ def get_lessons_with_metadata(connection_string: str):
             cursor.close()
         if conn:
             conn.close()
-
+            
+from langchain.document_loaders import CSVLoader
+def read_csv_data(database, connection_str, embeddings, collection_name="problems_and_courses"):
+    if database not in ["courses", "problems"]:
+        raise ValueError("Invalid database name! must be courses or problems!")
+    loader = CSVLoader(f"/Users/mac/HCMUS/datn/agent-service-toolkit/src/documents/{database}.csv", encoding="windows-1252")
+    data = loader.load()
+    docsearch = PGVector.from_documents(documents=data, embedding=embeddings, connection=connection_str, collection_name=collection_name)
+    return docsearch
+    
 def chunk_data(data):
     ''' Function to split documents into chunks '''
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000000)
@@ -120,4 +129,6 @@ if __name__ == "__main__":
     embeddings = create_embeddings()
     print('STORING.......')
     vectorstore = stuff_vectordatabase(chunks=documents,embeddings=embeddings,collection_name="lesson_content", connection_str=connection_string)
+    courses_data = read_csv_data("courses", connection_string, embeddings, "courses")
+    problems_data = read_csv_data("problems", connection_string, embeddings, "problems")
     print('DONE!')

@@ -24,4 +24,7 @@ COPY src/schema/ ./schema/
 COPY src/service/ ./service/
 COPY src/run_service.py .
 
+# Expose the port 
+EXPOSE 8106
+
 CMD ["python", "run_service.py"]

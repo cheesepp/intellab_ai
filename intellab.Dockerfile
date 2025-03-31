@@ -16,23 +16,15 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the .env file into the container
-COPY docker.env /app/.env
+# Copy the pre-built wheel file to the container
+COPY build/*.whl /app/
 
-# Copy the source code into the container
-COPY src /app/src
-COPY src/researchs/ ./researchs/
-COPY src/documents/ ./documents/
+# Install the wheel package
+RUN pip install /app/*.whl --no-cache-dir
 
-COPY pyproject.toml /app/pyproject.toml
-COPY uv.lock /app/uv.lock
-
-# Install dependencies
-RUN pip install --no-cache-dir uv
-RUN uv sync --frozen --no-install-project --no-dev
-
-# Expose the port 
+# Expose FastAPI port
 EXPOSE 8106
 
-# Set the default command to run your application
-CMD ["python", "/app/src/run_service.py"]
+# Run the FastAPI application
+CMD ["uvicorn", "service:app", "--host", "0.0.0.0", "--port", "8006"]
+

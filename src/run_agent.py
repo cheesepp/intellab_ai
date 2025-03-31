@@ -10,16 +10,20 @@ load_dotenv()
 
 from agents.agents import DEFAULT_AGENT, agents  # noqa: E402
 
-agent = agents[DEFAULT_AGENT].graph
+agent = agents["global_chatbot"].graph
 
 
 async def main() -> None:
-    inputs = {"messages": [("human", "Summarize course by querying with this id: 598d78e5-c34f-437f-88fb-31557168c07b")]}
-    result = await agent.ainvoke(
-        inputs,
-        config=RunnableConfig(configurable={"thread_id": uuid4(), "model": GroqModelName.LLAMA_33_70B}),
-    )
-    result["messages"][-1].pretty_print()
+    chunks = []
+    inputs = {"messages": [("human", "Recommend me som courses and problems that related to arrays")]}
+    async for chunk in agent.astream(inputs):
+        chunks.append(chunk)
+        print(chunk, end="|", flush=True)
+    # result = await agent.ainvoke(
+    #     inputs,
+    #     config=RunnableConfig(configurable={"thread_id": uuid4(), "model": GroqModelName.LLAMA_33_70B}),
+    # )
+    # result["messages"][-1].pretty_print()
 
     # Draw the agent graph as png
     # requires:
