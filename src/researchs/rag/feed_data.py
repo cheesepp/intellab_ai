@@ -1,4 +1,5 @@
 from typing import List
+import uuid
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import psycopg2
@@ -94,9 +95,10 @@ from langchain.document_loaders import CSVLoader
 def read_csv_data(database, connection_str, embeddings, collection_name="problems_and_courses"):
     if database not in ["courses", "problems"]:
         raise ValueError("Invalid database name! must be courses or problems!")
-    loader = CSVLoader(f"/Users/mac/HCMUS/datn/agent-service-toolkit/src/documents/{database}.csv", encoding="windows-1252")
+    loader = CSVLoader(f"../documents/{database}.csv", encoding="windows-1252")
     data = loader.load()
-    docsearch = PGVector.from_documents(documents=data, embedding=embeddings, connection=connection_str, collection_name=collection_name)
+    ids = [str(uuid.uuid4()) for _ in data]
+    docsearch = PGVector.from_documents(documents=data, embedding=embeddings, connection=connection_str, collection_name=collection_name, ids=ids)
     return docsearch
     
 def chunk_data(data):
@@ -112,7 +114,8 @@ def create_embeddings():
 
 def stuff_vectordatabase(chunks, embeddings, collection_name, connection_str):
     ''' Function to load the chunks into the vector database '''
-    docsearch = PGVector.from_documents(documents=chunks, embedding=embeddings, connection=connection_str, collection_name=collection_name)
+    ids = [str(uuid.uuid4()) for _ in chunks]
+    docsearch = PGVector.from_documents(documents=chunks, embedding=embeddings, connection=connection_str, collection_name=collection_name, ids=ids)
     return docsearch
 
 # Example usage
