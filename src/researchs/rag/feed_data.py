@@ -76,8 +76,8 @@ def get_lessons_with_metadata(connection_string: str):
             documents.append({"page_content": cleaned_content, "metadata": metadata})
         
         # Write documents to a file
-        with open('/Users/mac/HCMUS/datn/agent-service-toolkit/src/researchs/lesson_documents.json', 'w') as f:
-            json.dump(documents, f, indent=4)
+        # with open('/Users/mac/HCMUS/datn/agent-service-toolkit/src/researchs/lesson_documents.json', 'w') as f:
+        #     json.dump(documents, f, indent=4)
         
         return documents
         
@@ -95,7 +95,7 @@ from langchain.document_loaders import CSVLoader
 def read_csv_data(database, connection_str, embeddings, collection_name="problems_and_courses"):
     if database not in ["courses", "problems"]:
         raise ValueError("Invalid database name! must be courses or problems!")
-    loader = CSVLoader(f"../documents/{database}.csv", encoding="windows-1252")
+    loader = CSVLoader(f"./src/documents/{database}.csv", encoding="windows-1252")
     data = loader.load()
     ids = [str(uuid.uuid4()) for _ in data]
     docsearch = PGVector.from_documents(documents=data, embedding=embeddings, connection=connection_str, collection_name=collection_name, ids=ids)

@@ -109,7 +109,7 @@ async def message_generator(
         print(f"Error: {e}")
         remaining_usage = max_usage_problem_chatbot_per_plan(subscription_plan)
 
-    if (subscription_plan == FREE_PLAN or subscription_plan==COURSE_PLAN) and remaining_usage <= 0:
+    if (subscription_plan == FREE_PLAN or subscription_plan==COURSE_PLAN) and agent_id==PROBLEM_CHATBOT and remaining_usage <= 0:
         yield f"data: {json.dumps({'type': 'error', 'content': 'Usage limit exceeded for today. Please upgrade your plan or try on next day.'})}\n\n"
         return
     

@@ -6,3 +6,4 @@ uv sync --frozen
 python ./src/run_service.py
 python ./run_service.py
 python ./run_service.py -p 8006
+python ./src/researchs/rag/feed_data.py
