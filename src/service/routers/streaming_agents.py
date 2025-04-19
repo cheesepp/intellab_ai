@@ -270,6 +270,19 @@ router = APIRouter(prefix="/stream")
                 model: 
              }
              """)
+@router.post("/lesson_chatbot",  tags=["Lesson Chatbot"], 
+             response_class=StreamingResponse, responses=_sse_response_example(),
+             description="""
+             This agent is lesson chatbot used in lesson detail page.
+             Request format:
+             
+             {
+                message: "Lesson: <lesson_content> Lesson_id: <lesson_id> Question: <question>"
+                user_id:
+                thread_id:
+                model: 
+             }
+             """)
 @router.post("/title_generator",  tags=["Title Generator"],
              response_class=StreamingResponse, responses=_sse_response_example(),
              description="""

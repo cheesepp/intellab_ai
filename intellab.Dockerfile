@@ -1,8 +1,8 @@
 FROM python:3.12.3-slim
 
 # Set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 # Set the working directory in the container
 WORKDIR /app
@@ -16,11 +16,12 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+COPY src/documents/fonts/ ./documents/fonts/
 # Copy the pre-built wheel file to the container
 COPY build/*.whl /app/
 
 # Install the wheel package
-RUN pip install /app/*.whl --no-cache-dir
+RUN pip install /app/*.whl
 
 # Expose FastAPI port
 EXPOSE 8106
