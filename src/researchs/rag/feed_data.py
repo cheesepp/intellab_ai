@@ -75,9 +75,6 @@ def get_lessons_with_metadata(connection_string: str):
             
             documents.append({"page_content": cleaned_content, "metadata": metadata})
         
-        # Write documents to a file
-        # with open('/Users/mac/HCMUS/datn/agent-service-toolkit/src/researchs/lesson_documents.json', 'w') as f:
-        #     json.dump(documents, f, indent=4)
         
         return documents
         

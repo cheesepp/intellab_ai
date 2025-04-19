@@ -78,6 +78,18 @@ router = APIRouter(prefix="/invoke")
                 model: 
              }
              """)
+@router.post("/lesson_chatbot",  tags=["Lesson Chatbot"], 
+             description="""
+             This agent is lesson chatbot used in lesson detail page.
+             Request format:
+             
+             {
+                message: "Lesson: <lesson_content> Lesson_id: <lesson_id> Question: <question>"
+                user_id:
+                thread_id:
+                model: 
+             }
+             """)
 @router.post("/title_generator",  tags=["Title Generator"],
              description="""
              This agent used to generate title for each conversation
