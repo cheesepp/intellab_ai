@@ -15,7 +15,7 @@ from langchain_core.messages import (
 from langchain_core.runnables import RunnableConfig
 from schema import ChatMessage
 from schema.schema import UserInput
-from core.database import global_chatbot_collection, problem_chatbot_collection
+from core.database import global_chatbot_collection, problem_chatbot_collection, lesson_chatbot_collection
 from uuid import UUID, uuid4
 from typing import Annotated, Any, List
 
@@ -330,7 +330,7 @@ async def store_problem_chat_history(user_input: UserInput, ai_output: ChatMessa
                 {"$set": {"remaining_usage": remaining_usage, "max_usage": max_usage, "last_reset": last_reset}}
             )
         else:
-            global_chatbot_collection.update_one(
+            problem_chatbot_collection.update_one(
                 {"user_id": user_id},
                 {"$set": {"remaining_usage": max_usage - 1, "max_usage": max_usage, "last_reset": datetime.now()}}
             )
@@ -387,6 +387,102 @@ async def get_current_usage(user_id: str, subscription_plan: str = 'free') -> di
         "max_usage": max_usage,
         "unlimited": unlimited,
     }
+
+# ==================== UTILS FOR LESSON CHATBOT ====================== 
+MAX_USAGE_FREE_PLAN_FOR_LESSON_CHATBOT = 7
+
+def max_usage_lesson_chatbot_per_plan(argument):
+    switcher = {
+        "free": MAX_USAGE_FREE_PLAN_FOR_LESSON_CHATBOT,
+        "ALGORITHM_PLAN": sys.maxsize,
+        "COURSE_PLAN": 20,
+        "PREMIUM_PLAN": sys.maxsize,
+        "FREE_PLAN": MAX_USAGE_FREE_PLAN_FOR_LESSON_CHATBOT,
+    }
+    
+    return switcher.get(argument, MAX_USAGE_FREE_PLAN_FOR_LESSON_CHATBOT)
+
+async def get_current_usage_of_lesson_chatbot(user_id: str, subscription_plan: str = 'free') -> dict:
+    user_data = lesson_chatbot_collection.find_one({"user_id": user_id})
+    if not user_data:
+        raise HTTPException(status_code=404, detail="User not found in database")
+    
+    remaining_usage = user_data.get("remaining_usage", 0)
+    last_reset = user_data.get("last_reset", datetime.min)
+
+    # Determine max_usage based on subscription_plan
+    max_usage = max_usage_lesson_chatbot_per_plan(subscription_plan)
+
+
+    # reset usage at midnight
+    # Check if the current date is different from the last reset date
+    current_date = datetime.now().date()
+    last_reset_date = last_reset.date()
+    if current_date > last_reset_date:
+        remaining_usage = max_usage #user_data.get("max_usage", 0)
+
+    # Reset after 1 day
+    # if datetime.now() - last_reset > timedelta(days=1):
+    #     remaining_usage = user_data.get("max_usage", 0)
+    unlimited: bool = subscription_plan == PREMIUM_PLAN or subscription_plan == COURSE_PLAN
+    return {
+        "remaining_usage": remaining_usage,
+        "last_reset": last_reset,
+        "max_usage": max_usage,
+        "unlimited": unlimited,
+    }
+
+async def store_lesson_chat_history(user_id: str, max_usage: int = MAX_USAGE_FREE_PLAN_FOR_LESSON_CHATBOT):
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid user id!")
+
+    user_data = lesson_chatbot_collection.find_one({"user_id": user_id})
+
+    if user_data:
+        # Update remaining_usage
+        if "remaining_usage" in user_data:
+            remaining_usage = user_data["remaining_usage"]
+            last_reset = user_data.get("last_reset", datetime.min)
+
+            # reset usage after 1 day
+            # if datetime.now() - last_reset > timedelta(days=1):
+            #     remaining_usage = max_usage
+            #     last_reset = datetime.now()
+
+            # reset usage at midnight
+            current_date = datetime.now().date()
+            last_reset_date = last_reset.date()
+            if current_date > last_reset_date:
+                remaining_usage = max_usage
+                last_reset = datetime.now()
+
+            if remaining_usage > 0:
+                remaining_usage -= 1
+            else:
+                raise HTTPException(status_code=403, detail="Usage limit exceeded for today. Please upgrade your plan or try on next day.")
+            lesson_chatbot_collection.update_one(
+                {"user_id": user_id},
+                {"$set": {"remaining_usage": remaining_usage, "max_usage": max_usage, "last_reset": last_reset}}
+            )
+        else:
+            lesson_chatbot_collection.update_one(
+                {"user_id": user_id},
+                {"$set": {"remaining_usage": max_usage - 1, "max_usage": max_usage, "last_reset": datetime.now()}}
+            )
+
+
+    else:
+        print("ADD NEW USER TO DATABASE")
+        
+        new_user = {
+            "user_id": user_id,
+            "max_usage": max_usage,
+            "remaining_usage": max_usage - 1,
+            "last_reset": datetime.now()
+        }
+
+        lesson_chatbot_collection.insert_one(new_user)
+        print({"message": "New user created and conversation started"})
 
 # ==================== UTILS FOR TITLE GENERATOR AGENT ===================
 async def store_title(user_input: UserInput, output: str, thread_id: str):
