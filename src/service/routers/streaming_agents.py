@@ -31,10 +31,13 @@ from service.utils import (
     _parse_input,
     convert_message_content_to_string,
     get_current_usage,
+    get_current_usage_of_lesson_chatbot,
     langchain_to_chat_message,
+    max_usage_lesson_chatbot_per_plan,
     remove_tool_calls,
     save_to_pdf,
     store_chat_history,
+    store_lesson_chat_history,
     store_problem_chat_history,
     store_title,
     store_problem_title
@@ -57,6 +60,7 @@ ALGORITHM_PLAN = "ALGORITHM_PLAN"
 # CONSTANTS OF CHATBOT AGENTS
 GLOBAL_CHATBOT = "global_chatbot"
 PROBLEM_CHATBOT = "problem_chatbot"
+LESSON_CHATBOT = "lesson_chatbot"
 
 LIST_HIGH_COST_MODELS = ["claude-3-haiku", "bedrock-3.5-haiku", "gpt-4o-mini"]
 
@@ -92,12 +96,12 @@ async def message_generator(
     print(f"Agent ID: {agent_id}")
     print(f"is free plan: {subscription_plan == FREE_PLAN}")
 
-    if (agent_id == GLOBAL_CHATBOT or agent_id == PROBLEM_CHATBOT) and (subscription_plan is None or subscription_plan == ""):
+    if (agent_id == GLOBAL_CHATBOT or agent_id == PROBLEM_CHATBOT or agent_id == LESSON_CHATBOT) and (subscription_plan is None or subscription_plan == ""):
         yield f"data: {json.dumps({'type': 'error', 'content': 'Please login to continue.'})}\n\n"
         return
 
     # check if user has permission to access high cost models
-    if (agent_id==GLOBAL_CHATBOT or agent_id==PROBLEM_CHATBOT) and subscription_plan == FREE_PLAN and (user_input.model in LIST_HIGH_COST_MODELS):
+    if (agent_id==GLOBAL_CHATBOT or agent_id==PROBLEM_CHATBOT or agent_id == LESSON_CHATBOT) and subscription_plan == FREE_PLAN and (user_input.model in LIST_HIGH_COST_MODELS):
         yield f"data: {json.dumps({'type': 'error', 'content': 'User does not have permission to access this agent. Please upgrade to premium plan.'})}\n\n"
         return
     
@@ -110,6 +114,18 @@ async def message_generator(
         remaining_usage = max_usage_problem_chatbot_per_plan(subscription_plan)
 
     if (subscription_plan == FREE_PLAN or subscription_plan==COURSE_PLAN) and agent_id==PROBLEM_CHATBOT and remaining_usage <= 0:
+        yield f"data: {json.dumps({'type': 'error', 'content': 'Usage limit exceeded for today. Please upgrade your plan or try on next day.'})}\n\n"
+        return
+    
+
+    try:
+        current_usage_of_lesson_chatbot_dict =  await get_current_usage_of_lesson_chatbot(user_input.user_id, subscription_plan)
+        remaining_usage_of_lesson_chatbot = current_usage_of_lesson_chatbot_dict["remaining_usage"]
+    except Exception as e:
+        print(f"Error: {e}")
+        remaining_usage_of_lesson_chatbot = max_usage_lesson_chatbot_per_plan(subscription_plan)
+
+    if (subscription_plan == FREE_PLAN or subscription_plan==PROBLEM_CHATBOT) and agent_id==LESSON_CHATBOT and remaining_usage_of_lesson_chatbot <= 0:
         yield f"data: {json.dumps({'type': 'error', 'content': 'Usage limit exceeded for today. Please upgrade your plan or try on next day.'})}\n\n"
         return
     
@@ -167,6 +183,10 @@ async def message_generator(
                 print("STORE PROBLEM CHAT")
                 max_usage = max_usage_problem_chatbot_per_plan(subscription_plan)
                 await store_problem_chat_history(user_input, chat_message, thread_id, timestamp, max_usage)
+            if agent_id == "lesson_chatbot":
+                print("STORE LESSON CHAT")
+                max_usage = max_usage_lesson_chatbot_per_plan(subscription_plan)
+                await store_lesson_chat_history(user_input.user_id, max_usage)
             elif agent_id == "title_generator":
                 if user_input.problem_title == "1":
                     await store_problem_title(user_input, chat_message.content, thread_id)
@@ -352,7 +372,6 @@ async def stream(request: Request, user_input: StreamInput) -> StreamingResponse
         "unlimited": <unlimited>
     }
             """)
-
 async def get_usage(request: Request) -> dict:
     # Extract the X-UserRole header
     user_role_header = request.headers.get("X-UserRole", "")
@@ -371,6 +390,42 @@ async def get_usage(request: Request) -> dict:
         print(f"Error: {e}")
         max_usage = max_usage_problem_chatbot_per_plan(premium_plan)
         unlimited: bool = premium_plan == PREMIUM_PLAN or premium_plan == PREMIUM_PLAN
+        return {
+            "remaining_usage": max_usage,
+            "last_reset": datetime.now(),
+            "max_usage": max_usage,
+            "unlimited": unlimited,
+        }
+
+@router.get("/lesson_chatbot/usage", tags=["Lesson Chatbot"], description="""
+    Get the current usage for the lesson chatbot.
+    Request header: access token
+    Response format:
+    {
+        "max_usage": <max_usage>,
+        "remaining_usage": <remaining_usage>,
+        "last_reset": <last_reset>,
+        "unlimited": <unlimited>
+    }
+            """)
+async def get_usage_of_lesson_chatbot(request: Request) -> dict:
+    # Extract the X-UserRole header
+    user_role_header = request.headers.get("X-UserRole", "")
+    print(f"User Role Header: {user_role_header}")
+    user_role, premium_plan = user_role_header.split(",") if user_role_header else ("", "")
+
+    user_id_header = request.headers.get("X-UserId", "")
+    print(f"User ID Header: {user_id_header}")
+    # Log the extracted values
+    print(f"User Role: {user_role}, Premium Plan: {premium_plan}")
+
+    try:
+        result = await get_current_usage_of_lesson_chatbot(user_id_header, premium_plan)
+        return result
+    except Exception as e:
+        print(f"Error: {e}")
+        max_usage = max_usage_lesson_chatbot_per_plan(premium_plan)
+        unlimited: bool = premium_plan == PREMIUM_PLAN or premium_plan == COURSE_PLAN
         return {
             "remaining_usage": max_usage,
             "last_reset": datetime.now(),

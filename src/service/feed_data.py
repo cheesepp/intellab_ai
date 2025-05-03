@@ -124,8 +124,9 @@ def stuff_vectordatabase(chunks, embeddings, collection_name, connection_str):
     return docsearch
 
 # Example usage
-if __name__ == "__main__":
-    connection_string = "postgresql://postgres:123456@localhost:5433/intellab-db"
+def feed_data():
+    connection_string = os.getenv("DB_CONNECTION_STRING")
+    #connection_string = "postgresql://postgres:123456@localhost:5433/intellab-db"
 
     documents: List[Document] = []
     lesson_documents = get_lessons_with_metadata(connection_string)

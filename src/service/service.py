@@ -33,6 +33,9 @@ from schema import (
     StreamInput,
     UserInput,
 )
+from service import (
+    feed_data,
+)
 from service.utils import (
     _parse_input,
     convert_message_content_to_string,
@@ -151,6 +154,13 @@ async def get_pdf():
     # os.remove(pdf_path)
     return response
 
+@router.post("/feed-data", tags=["Vector Database"])
+async def initializeVectorDatabase():
+
+    feed_data()
+
+    return {"message": "oke"}
+
 # from fastapi.middleware.cors import CORSMiddleware
 
 # app.add_middleware(
@@ -162,3 +172,15 @@ async def get_pdf():
 # )
 
 app.include_router(router)
+
+# Define the function to run on startup
+# @app.on_event("startup")
+# async def startup_event():
+#     print("FastAPI app has started successfully!")
+#     print("========= Initializing vector database... =============")
+#     # Call your function here
+#     await initialize_vector_database()
+
+# # Example function to initialize the vector database
+# async def initialize_vector_database():
+#     feed_data()
