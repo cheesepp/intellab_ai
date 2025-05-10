@@ -131,7 +131,7 @@ async def llama_guard_output(state: State, config: RunnableConfig) -> State:
 
     For each input, respond with:
     - FIRST LINE: Either "relevant" or "irrelevant" (lowercase, no additional words)
-    - SECOND LINE: A brief explanation of your decision, respond friendly and advise user back to programming topics.
+    - SECOND LINE: A brief explanation of your decision, respond friendly and advise user back to programming topics, start with "Sorry, but..." if the input is irrelevant
 
     Classify as RELEVANT:
     - Programming languages and their features

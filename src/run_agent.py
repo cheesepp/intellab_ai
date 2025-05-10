@@ -10,12 +10,12 @@ load_dotenv()
 
 from agents.agents import DEFAULT_AGENT, agents  # noqa: E402
 
-agent = agents["global_chatbot"].graph
+agent = agents["lesson_chatbot"].graph
 
 
 async def main() -> None:
     chunks = []
-    inputs = {"messages": [("human", "Recommend me som courses and problems that related to arrays")]}
+    inputs = {"messages": [("human", "Lesson: Introduction to Circular Linked List Lesson_id: 4cd8171b-fbfb-4ac2-bd58-4d59d056750d Question: Explain string theory")]}
     async for chunk in agent.astream(inputs):
         chunks.append(chunk)
         print(chunk, end="|", flush=True)

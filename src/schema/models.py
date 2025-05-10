@@ -26,6 +26,7 @@ class OllamaModelName(StrEnum):
 class OpenAIModelName(StrEnum):
     """https://platform.openai.com/docs/models/gpt-4o"""
     LEARNLM_15_PRO = "learnlm-1.5-pro"
+    DEEPHERMES_3 = "deep-hermes-3"
     GEMINI_25_PRO = "gemini-2.5-pro"
     GPT_4O_MINI = "gpt-4o-mini"
     GPT_4O = "gpt-4o"

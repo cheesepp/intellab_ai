@@ -61,6 +61,8 @@ Based on the provided lesson content:
 • [Third key concept with a brief explanation]
 
 Keep each bullet point concise and focused on one main idea. Include complexity analysis when relevant.
+Ensure each bullet point is on its own line, not in a row.
+Make the lesson name bold using markdown formatting.
 
 Return the summary for this lesson.
 """
@@ -253,44 +255,44 @@ def should_collapse(
 # store content to db
 # ---- store summary node ----
 def store_summary(state: State):
-    """Insert a note into the PostgreSQL database."""
-    print("-------- STORE SUMMARY --------")
+    # """Insert a note into the PostgreSQL database."""
+    # print("-------- STORE SUMMARY --------")
     new_content = state["answer"]
-    course_name = state["course_name"]
-    course_id = state["course_id"]
-    try:
-        # Create a database engine
-        engine = create_engine(DB_CONNECTION_STRING)
+    # course_name = state["course_name"]
+    # course_id = state["course_id"]
+    # try:
+    #     # Create a database engine
+    #     engine = create_engine(DB_CONNECTION_STRING)
         
-        with engine.connect() as conn:
-            # Check if the course summary exists
-            query = text("SELECT summary_content FROM course_summary WHERE course_id = :course_id")
-            result = conn.execute(query, {"course_id": course_id}).scalar()
+    #     with engine.connect() as conn:
+    #         # Check if the course summary exists
+    #         query = text("SELECT summary_content FROM course_summary WHERE course_id = :course_id")
+    #         result = conn.execute(query, {"course_id": course_id}).scalar()
 
-            if result is None:
-                # Insert new summary
-                insert_query = text("""
-                    INSERT INTO course_summary (course_id, course_name, summary_content)
-                    VALUES (:course_id, :course_name, :new_content)
-                """)
-                conn.execute(insert_query, {"course_id": course_id, "course_name": course_name, "new_content": new_content})
-                print(f"New summary added for course: {course_name}.")
-            elif result == '':
-                # Update existing record if summary_content is empty
-                update_query = text("""
-                    UPDATE course_summary
-                    SET summary_content = :new_content
-                    WHERE course_id = :course_id
-                """)
-                conn.execute(update_query, {"course_id": course_id, "new_content": new_content})
-                print(f"Summary updated for course: {course_name}.")
-            else:
-                print(f"Summary already exists for course: {course_name}. No action needed.")
+    #         if result is None:
+    #             # Insert new summary
+    #             insert_query = text("""
+    #                 INSERT INTO course_summary (course_id, course_name, summary_content)
+    #                 VALUES (:course_id, :course_name, :new_content)
+    #             """)
+    #             conn.execute(insert_query, {"course_id": course_id, "course_name": course_name, "new_content": new_content})
+    #             print(f"New summary added for course: {course_name}.")
+    #         elif result == '':
+    #             # Update existing record if summary_content is empty
+    #             update_query = text("""
+    #                 UPDATE course_summary
+    #                 SET summary_content = :new_content
+    #                 WHERE course_id = :course_id
+    #             """)
+    #             conn.execute(update_query, {"course_id": course_id, "new_content": new_content})
+    #             print(f"Summary updated for course: {course_name}.")
+    #         else:
+    #             print(f"Summary already exists for course: {course_name}. No action needed.")
             
-            conn.commit()
+    #         conn.commit()
     
-    except Exception as e:
-        print("Database error:", e)
+    # except Exception as e:
+    #     print("Database error:", e)
     return {"answer": new_content}
     
 # Here we will generate the final summary
