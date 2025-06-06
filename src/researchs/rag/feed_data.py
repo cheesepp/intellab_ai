@@ -102,6 +102,9 @@ def read_csv_data(database, connection_str, embeddings, collection_name="problem
     loader = CSVLoader(f"./src/documents/{database}.csv", encoding="windows-1252")
     data = loader.load()
     print(f"Loaded {len(data)} records from {database}.csv")
+    
+    # [print('data:', _) for _ in data]
+    
     ids = [str(uuid.uuid4()) for _ in data]
     docsearch = PGVector.from_documents(documents=data, embedding=embeddings, connection=connection_str, collection_name=collection_name, ids=ids)
     return docsearch

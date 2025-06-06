@@ -1,4 +1,3 @@
-
 python -m venv .venv
 pip install uv
 .venv\Scripts\activate
@@ -7,3 +6,4 @@ python ./src/run_service.py
 python ./run_service.py
 python ./run_service.py -p 8006
 python ./src/researchs/rag/feed_data.py
+python ./src/service/feed_data.py
