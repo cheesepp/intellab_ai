@@ -56,6 +56,27 @@ class State(TypedDict):
     lesson_name: str
     question: str
 
+# template = """
+# You are an Expert Educational Content Interpreter specializing in explaining lesson materials. Your primary role is to provide clear, precise explanations of specific sentences or concepts from lesson content that users ask about.
+
+# CONTEXT
+# Lesson Content: {lesson_content}
+# Current discussion: {conversation}
+
+# USER QUERY
+# The user is asking about: "{question}"
+
+# RESPONSE GUIDELINES:
+# 1. Focus specifically on explaining the sentence or concept the user is asking about
+# 2. Connect the explanation directly to the broader lesson content provided in the context
+# 3. Provide precise definitions of technical terms appearing in the sentence
+# 4. Explain how this specific concept fits within the larger framework of the lesson
+# 5. Use clear, concise language appropriate for educational settings
+# 6. Include relevant examples from the lesson content when helpful
+# 7. Maintain professional academic tone throughout your response
+# 8. Answer directly without meta-references to "the context" or "the materials"
+
+# When responding, first identify the specific sentence/concept in question, then provide a thorough explanation that places it within the broader context of the lesson material."""
 template = """
 You are an Expert Educational Content Interpreter specializing in explaining lesson materials. Your primary role is to provide clear, precise explanations of specific sentences or concepts from lesson content that users ask about.
 
@@ -75,8 +96,12 @@ RESPONSE GUIDELINES:
 6. Include relevant examples from the lesson content when helpful
 7. Maintain professional academic tone throughout your response
 8. Answer directly without meta-references to "the context" or "the materials"
-
-When responding, first identify the specific sentence/concept in question, then provide a thorough explanation that places it within the broader context of the lesson material."""
+9. Limit responses to maximum 100 words
+10. Be concise and focused on the core question - avoid lengthy explanations
+11. Don't start responses with phrases like "Here...", "Because user has asked...", "According to the lesson context,...", or "The specific concept being asked about is:..."
+12. If question is outside the lesson scope, immediately state it's beyond scope and invite questions related to the lesson
+13. Present all information in plain text format only - do not use tables or code blocks
+When responding, identify the specific sentence/concept and provide a concise explanation that places it within the broader context of the lesson material."""
 
 embeddings = OllamaEmbeddings(
     model="nomic-embed-text",
@@ -85,6 +110,90 @@ embeddings = OllamaEmbeddings(
 # Create an index using the loaded documents
 prompt = ChatPromptTemplate.from_template(template)
 
+def format_is_relevant_message(safety: LlamaGuardOutput) -> AIMessage:
+    content = (
+        f"{safety.unsafe_response}"
+    )
+    return AIMessage(content=content)
+
+async def llama_guard_output(state: State, config: RunnableConfig) -> State:
+    # llama_guard = LlamaGuard()
+    # safety_output = await llama_guard.ainvoke("User", state["messages"])
+    # return {"output_safety": safety_output}
+    checking_template = """You are an expert at determining whether an input is relevant to programming or casual conversation that should be allowed in a programming-focused chatbot.
+
+    User input: {question}
+
+    Your task is to:
+    1. Analyze the input carefully
+    2. Determine if it's relevant to programming topics OR is appropriate casual conversation
+    3. Provide a clear response
+
+    For each input, respond with:
+    - FIRST LINE: Either "relevant" or "irrelevant" (lowercase, no additional words)
+    - SECOND LINE: A brief explanation of your decision, respond friendly and advise user back to programming topics, start with "Sorry, but..." if the input is irrelevant
+
+    Classify as RELEVANT:
+    - Programming languages and their features
+    - Algorithms and data structures
+    - Software development practices
+    - Computer science concepts
+    - Coding problems and their solutions
+    - System design and architecture
+    - Development tools and environments
+    - Questions about programming courses or learning resources
+    - Greetings and casual conversation starters (like "Hi", "How are you?", "Good morning")
+    - Follow-up questions that might appear irrelevant in isolation but are likely part of a programming conversation
+    - Questions about career advice in programming/software development
+    - Any ambiguous question that could reasonably relate to programming
+
+    Examples:
+    Input: "How do I implement a binary search in Python?"
+    Output:
+    relevant
+    This question directly relates to implementing an algorithm in a programming language.
+
+    Input: "Hi there! Can you help me with some coding questions?"
+    Output:
+    relevant
+    This is a greeting and conversation starter appropriate for a programming-focused chatbot.
+
+    Input: "What's the best recipe for chocolate chip cookies?"
+    Output:
+    irrelevant
+    This question is about cooking/baking and has no connection to programming.
+
+    Input: "Can you recommend some resources for learning React?"
+    Output:
+    relevant
+    This question is about learning resources for a programming framework.
+
+    Input: "What do you think about politics today?"
+    Output:
+    irrelevant
+    This question is about politics and not related to programming."""
+    
+    prompt = ChatPromptTemplate.from_template(checking_template)
+    model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
+    checking_output = prompt | model
+    messages = state["messages"]
+    response = await checking_output.ainvoke({"question": messages[-1].content})
+    llama_guard = parse_llama_guard_relevant_topic(response.content)
+    return {"is_relevant": llama_guard}
+
+async def block_irrelevant_content(state: State, config: RunnableConfig) -> State:
+    safety: LlamaGuardOutput = state["is_relevant"]
+    return {"messages": [format_is_relevant_message(safety)]}
+
+# Check for unsafe input and block further processing if found
+def check_is_relevant(state: State) -> Literal["relevant", "irrelevant"]:
+    is_relevant: LlamaGuardOutput = state["is_relevant"]
+    match is_relevant.safety_assessment:
+        case SafetyAssessment.UNSAFE:
+            return "irrelevant"
+        case _:
+            return "relevant"
+        
 def extract_message(state: State):
     message = state["messages"][-1].content
     print (f"========= GO {message} ============")
@@ -96,8 +205,8 @@ def extract_message(state: State):
         lesson_name = match.group(1)
         lesson_id = match.group(2)
         question = match.group(3)
-        print("Problem Content:", lesson_name)
-        print("Problem ID:", lesson_id)
+        print("Lesson Name:", lesson_name)
+        print("Lesson ID:", lesson_id)
         print("Question:", question)
         return {"lesson_name": lesson_name, "question": question}
     else:
@@ -176,10 +285,16 @@ agent = StateGraph(State)
 agent.add_node("extract", extract_message)
 agent.add_node("retrieve", retrieve)
 agent.add_node("model", acall_model)
+agent.add_node("guard_output", llama_guard_output)
 agent.add_node(summarize_conversation)
 agent.set_entry_point("extract")
+agent.add_node("block_irrelevant_content", block_irrelevant_content)
 
-agent.add_edge("extract", "retrieve")
+agent.add_conditional_edges(
+    "guard_output", check_is_relevant, {"irrelevant": "block_irrelevant_content", "relevant": "retrieve" }
+)
+
+agent.add_edge("extract", "guard_output")
 agent.add_edge("retrieve", "model")
 agent.add_edge("model", "summarize_conversation")
 agent.add_edge("summarize_conversation", END)
