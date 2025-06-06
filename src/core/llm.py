@@ -35,6 +35,7 @@ _MODEL_TABLE = {
     OpenAIModelName.ChatGPT_4O: "openai/chatgpt-4o-latest",
     OpenAIModelName.GEMINI_25_PRO: "google/gemini-2.5-pro-exp-03-25:free",
     OpenAIModelName.LEARNLM_15_PRO: "google/learnlm-1.5-pro-experimental:free",
+    OpenAIModelName.DEEPHERMES_3: "nousresearch/deephermes-3-mistral-24b-preview:free",
     AnthropicModelName.HAIKU_3: "claude-3-haiku-20240307",
     AnthropicModelName.HAIKU_35: "claude-3-5-haiku-latest",
     AnthropicModelName.SONNET_35: "claude-3-5-sonnet-latest",

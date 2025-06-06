@@ -1,25 +1,19 @@
+import os
 from typing import List
 import uuid
+from dotenv import load_dotenv
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import psycopg2
-import json
 from langchain_postgres import PGVector
-from langchain_community.document_loaders import JSONLoader
-from pprint import pprint
 from langchain_core.documents import Document
-from langchain_community.query_constructors.pgvector import PGVectorTranslator
-from langchain.chains.query_constructor.schema import AttributeInfo
-from langchain.retrievers.self_query.base import SelfQueryRetriever
-from langchain.chains.query_constructor.base import get_query_constructor_prompt
-from langchain.chains.query_constructor.base import StructuredQueryOutputParser
-from langchain_core.output_parsers import StrOutputParser
+from langchain_huggingface.embeddings import HuggingFaceEmbeddings
+from langchain_nomic import NomicEmbeddings
 
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough, RunnableParallel
+load_dotenv()  # Load biến môi trường từ .env
+
+
 import re
-import os
-from fpdf import FPDF
 def get_lessons_with_metadata(connection_string: str):
     """
     Connects to PostgreSQL, retrieves lesson and course data, 
@@ -120,6 +114,34 @@ def create_embeddings():
     ollama_embeddings = OllamaEmbeddings(model="nomic-embed-text", base_url="http://localhost:11434")
     return ollama_embeddings
 
+def create_nomic_embeddings():
+    ''' Function to create vector embeddings '''
+    NOMIC_API_KEY = os.getenv("NOMIC_API_KEY")
+    nomic_embeddings = NomicEmbeddings(model="nomic-embed-text-v1.5", nomic_api_key=NOMIC_API_KEY)
+    return nomic_embeddings
+
+def create_huggingface_embeddings():
+
+    ''' Function to create vector embeddings '''
+    model_name = "nomic-ai/nomic-embed-text-v1.5"
+    # Thêm cấu hình bắt buộc
+    model_kwargs = {
+        "trust_remote_code": True,
+        "device": "mps"  # Sử dụng Metal Performance Shaders trên Mac M1
+    }
+    
+    encode_kwargs = {
+        "normalize_embeddings": True,  # Bắt buộc theo docs của Nomic
+        "batch_size": 32,  # Giảm batch size để tránh lỗi memory
+        "truncate": True  # Tự động cắt văn bản dài
+    }
+    hf_embeddings = HuggingFaceEmbeddings(
+        model_name=model_name,
+        model_kwargs=model_kwargs,
+        encode_kwargs=encode_kwargs  # Thêm dòng này
+    )
+    return hf_embeddings
+
 def stuff_vectordatabase(chunks, embeddings, collection_name, connection_str):
     ''' Function to load the chunks into the vector database '''
     ids = [str(uuid.uuid4()) for _ in chunks]
@@ -137,7 +159,9 @@ if __name__ == "__main__":
         documents.append(document)
     print('documents length in main: ',len(documents))
     chunks = chunk_data(documents)
-    embeddings = create_embeddings()
+    # embeddings = create_embeddings()
+    # embeddings = create_huggingfacecom_embeddings()
+    embeddings = create_nomic_embeddings()
     print('STORING.......')
     vectorstore = stuff_vectordatabase(chunks=documents,embeddings=embeddings,collection_name="lesson_content", connection_str=connection_string)
     courses_data = read_csv_data("courses", connection_string, embeddings, "courses")
