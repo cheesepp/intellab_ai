@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated, Any, List
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, status, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, status, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from langchain_core._api import LangChainBetaWarning
@@ -33,8 +33,22 @@ from schema import (
     StreamInput,
     UserInput,
 )
-from service import (
-    feed_data,
+from service.feed_data import (
+    delete_all_embeddings,
+    delete_course_embeddings_by_course_id,
+    delete_embeddings_by_lesson_id,
+    delete_embeddings_by_problem_id,
+    delete_lessons_embeddings_by_course_id,
+    embed_data_by_course_id,
+    embed_data_by_lesson_id,
+    embed_data_by_problem_id,
+    feed_embedded_course_data,
+    feed_embedded_lesson_data,
+    feed_embedded_problem_data,
+    update_course_embedded_data_by_course_id,
+    update_lessons_embedded_data_by_course_id,
+    update_embedded_data_by_lesson_id,
+    update_embedded_data_by_problem_id,
 )
 from service.utils import (
     _parse_input,
@@ -87,6 +101,10 @@ def verify_bearer(
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Construct agent with Sqlite checkpointer
     # TODO: It's probably dangerous to share the same checkpointer on multiple agents
+    
+    #TODO: Uncomment the following line if you want to initialize the vector database on startup
+    await initialize_vector_database()
+
     async with AsyncConnectionPool(
         # Example configuration
         conninfo=os.getenv("DB_CONNECTION_STRING"),
@@ -154,12 +172,99 @@ async def get_pdf():
     # os.remove(pdf_path)
     return response
 
-@router.post("/feed-data", tags=["Vector Database"])
+@router.post("/feed-data", 
+    tags=["Vector Database"],
+    summary="Initialize vector database",
+    description="Loads all course and problem data into the vector database, creating embeddings for search and retrieval."
+)
 async def initializeVectorDatabase():
 
-    feed_data()
+    await initialize_vector_database()
 
-    return {"message": "oke"}
+    return {"message": "successfully fed data to vector database", "result": True}
+
+@router.put("/lesson/insert-embedding-data", 
+    tags=["Vector Database"],
+    summary="Insert lesson embedding data",
+    description="Creates vector embeddings for a specific lesson and stores them in the vector database."
+ )
+async def insertLessonEmbeddingData(lesson_id: str = Query(..., description="The unique identifier of the lesson")):
+
+    embed_data_by_lesson_id(lesson_id)
+
+    return {"message": "successfully inserted lesson embedding data", "result": True}
+
+@router.put("/lesson/update-embedding-data", 
+            tags=["Vector Database"],
+            summary="Update lesson embedding data",
+            description="Updates vector embeddings for a specific lesson in the vector database. This is useful when lesson content changes and requires re-embedding."
+)
+async def updateLessonEmbeddingData(lesson_id: str):
+
+    update_embedded_data_by_lesson_id(lesson_id)
+
+    return {"message": "successfully updated lesson embedding data", "result": True}
+
+@router.delete("/lesson/delete-embedding-data", 
+               tags=["Vector Database"],
+               summary="Delete lesson embedding data",
+               description="Deletes vector embeddings for a specific lesson from the vector database. This is useful for cleaning up or removing outdated lesson data."
+)
+async def deleteLessonEmbeddingData(lesson_id: str):
+    delete_embeddings_by_lesson_id(lesson_id)
+    return {"message": "successfully deleted lesson embedding data", "result": True}
+
+@router.put("/course/insert-embedding-data", 
+            tags=["Vector Database"],
+            summary="Insert course embedding data",
+            description="Creates vector embeddings for a specific course and stores them in the vector database."
+)
+async def insertCourseEmbeddingData(course_id: str):
+    embed_data_by_course_id(course_id)
+    return {"message": "successfully inserted course embedding data", "result": True}
+
+@router.put("/course/update-embedding-data", 
+            tags=["Vector Database"],
+            summary="Update course embedding data",
+            description="Updates vector embeddings for a specific course in the vector database. This is useful when course content changes and requires re-embedding."
+)
+async def updateCourseEmbeddingData(course_id: str):
+    update_lessons_embedded_data_by_course_id(course_id)
+    update_course_embedded_data_by_course_id(course_id)
+    return {"message": "successfully updated course embedding data", "result": True}
+
+@router.delete("/course/delete-embedding-data", tags=["Vector Database"],
+               summary="Delete course embedding data",
+               description="Deletes vector embeddings for a specific course from the vector database. This is useful for cleaning up or removing outdated course data."
+)
+async def deleteCourseEmbeddingData(course_id: str):
+    delete_lessons_embeddings_by_course_id(course_id)
+    delete_course_embeddings_by_course_id(course_id)
+    return {"message": "successfully deleted course embedding data", "result": True}
+
+@router.put("/problem/insert-embedding-data", tags=["Vector Database"],
+            summary="Insert problem embedding data",
+            description="Creates vector embeddings for a specific problem and stores them in the vector database."
+)
+async def insertProblemEmbeddingData(problem_id: str):
+    embed_data_by_problem_id(problem_id)
+    return {"message": "successfully inserted problem embedding data", "result": True}
+
+@router.put("/problem/update-embedding-data", tags=["Vector Database"],
+            summary="Update problem embedding data",
+            description="Updates vector embeddings for a specific problem in the vector database. This is useful when problem content changes and requires re-embedding."
+)
+async def updateProblemEmbeddingData(problem_id: str):
+    update_embedded_data_by_problem_id(problem_id)
+    return {"message": "successfully updated problem embedding data", "result": True}
+
+@router.delete("/problem/delete-embedding-data", tags=["Vector Database"],
+               summary="Delete problem embedding data",
+               description="Deletes vector embeddings for a specific problem from the vector database. This is useful for cleaning up or removing outdated problem data."
+)
+async def deleteProblemEmbeddingData(problem_id: str):
+    delete_embeddings_by_problem_id(problem_id)
+    return {"message": "successfully deleted problem embedding data", "result": True}
 
 # from fastapi.middleware.cors import CORSMiddleware
 
@@ -173,14 +278,25 @@ async def initializeVectorDatabase():
 
 app.include_router(router)
 
-# Define the function to run on startup
-# @app.on_event("startup")
-# async def startup_event():
-#     print("FastAPI app has started successfully!")
-#     print("========= Initializing vector database... =============")
-#     # Call your function here
-#     await initialize_vector_database()
+#Define the function to run on startup
+@app.on_event("startup")
+async def startup_event():
+    print("FastAPI app has started successfully!")
+    # await initialize_vector_database()
 
-# # Example function to initialize the vector database
-# async def initialize_vector_database():
-#     feed_data()
+# Example function to initialize the vector database
+async def initialize_vector_database():
+    print("========= Initializing vector database... =============")
+    try:
+        delete_all_embeddings()
+        # Initialize the vector database
+        feed_embedded_course_data()
+        feed_embedded_lesson_data()
+        feed_embedded_problem_data()
+        print("Vector database initialization completed")
+        return
+    finally:
+        # Any cleanup code if needed
+        print("Vector database resources released")
+
+        
