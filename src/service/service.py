@@ -97,6 +97,10 @@ def verify_bearer(
 #         yield
 #     # context manager will clean up the AsyncSqliteSaver on exit
 
+
+def get_connection_string():
+    return os.getenv("DB_CONNECTION_STRING")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Construct agent with Sqlite checkpointer
@@ -107,7 +111,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     async with AsyncConnectionPool(
         # Example configuration
-        conninfo=os.getenv("DB_CONNECTION_STRING"),
+        conninfo=get_connection_string(),
         max_size=20,
         kwargs={
             "autocommit": True,

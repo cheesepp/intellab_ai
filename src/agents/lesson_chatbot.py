@@ -1,7 +1,9 @@
 import re
+import os
 from langchain.document_loaders import CSVLoader
 from langchain.indexes import VectorstoreIndexCreator
 from langchain.chains.retrieval import create_retrieval_chain
+from langchain_nomic import NomicEmbeddings
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 import os
 from langchain_core.runnables import (
@@ -28,8 +30,12 @@ from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_core.runnables import RunnableParallel
 from langchain_core.documents import Document
 
-DB_CONNECTION_STRING = os.getenv("DB_CONNECTION_STRING")
-OLLAMA_HOST = os.getenv("OLLAMA_HOST")
+def get_db_connection():
+    return os.getenv("DB_CONNECTION_STRING")
+
+def get_ollama_host():
+    return os.getenv("OLLAMA_HOST")
+
 # DB_CONNECTION_STRING = "postgresql://postgres:123456@localhost:5433/intellab-db"
 # OLLAMA_HOST="http://localhost:11434"
 
@@ -39,11 +45,18 @@ connection_kwargs = {
 }
 
 def create_embeddings():
+    # ''' Function to create vector embeddings '''
+    # ollama_embeddings = OllamaEmbeddings(model="nomic-embed-text", base_url=get_ollama_host())
+    # return ollama_embeddings
     ''' Function to create vector embeddings '''
-    ollama_embeddings = OllamaEmbeddings(model="nomic-embed-text", base_url=OLLAMA_HOST)
-    return ollama_embeddings
+    NOMIC_API_KEY = os.getenv("NOMIC_API_KEY")
+    nomic_embeddings = NomicEmbeddings(model="nomic-embed-text-v1.5", nomic_api_key=NOMIC_API_KEY)
+    return nomic_embeddings
 
-vectorstore = PGVector(embeddings=create_embeddings(), collection_name="lesson_content", connection=DB_CONNECTION_STRING, use_jsonb=True)
+def get_vectorstore():
+    return PGVector(embeddings=create_embeddings(), collection_name="lesson_content", connection=get_db_connection(), use_jsonb=True)
+
+vectorstore = get_vectorstore()
 
 # We will add a `summary` attribute (in addition to `messages` key,
 # which MessagesState already has)
@@ -103,10 +116,7 @@ RESPONSE GUIDELINES:
 13. Present all information in plain text format only - do not use tables or code blocks
 When responding, identify the specific sentence/concept and provide a concise explanation that places it within the broader context of the lesson material."""
 
-embeddings = OllamaEmbeddings(
-    model="nomic-embed-text",
-    base_url=OLLAMA_HOST
-)
+embeddings = create_embeddings()
 # Create an index using the loaded documents
 prompt = ChatPromptTemplate.from_template(template)
 
