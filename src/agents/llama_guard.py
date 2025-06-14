@@ -5,7 +5,7 @@ from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel, Field
 
 from core import get_model, settings
-from schema.models import GroqModelName
+from schema.models import GroqModelName, OpenAIModelName
 
 
 class SafetyAssessment(Enum):
@@ -105,6 +105,7 @@ class LlamaGuard:
             self.model = None
             return
         self.model = get_model(GroqModelName.LLAMA_GUARD_3_8B).with_config(tags=["llama_guard"])
+        # self.model = get_model(OpenAIModelName.LLAMA_GUARD_3_8B).with_config(tags=["llama_guard"])
         self.prompt = PromptTemplate.from_template(llama_guard_instructions)
 
     def _compile_prompt(self, role: str, messages: list[AnyMessage]) -> str:
