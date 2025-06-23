@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # TODO: It's probably dangerous to share the same checkpointer on multiple agents
     
     #TODO: Uncomment the following line if you want to initialize the vector database on startup
-    await initialize_vector_database()
+    # await initialize_vector_database()
 
     async with AsyncConnectionPool(
         # Example configuration
