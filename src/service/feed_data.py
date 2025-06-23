@@ -421,11 +421,13 @@ def create_embeddings():
     ollama_embeddings = OllamaEmbeddings(model="nomic-embed-text", base_url="http://localhost:11434")
     return ollama_embeddings
 
+# TODO: Change here to use NomicEmbeddings when the API key is available
 def create_nomic_embeddings():
     ''' Function to create vector embeddings '''
-    NOMIC_API_KEY = os.getenv("NOMIC_API_KEY")
-    nomic_embeddings = NomicEmbeddings(model="nomic-embed-text-v1.5", nomic_api_key=NOMIC_API_KEY)
-    return nomic_embeddings
+    return create_embeddings()
+    # NOMIC_API_KEY = os.getenv("NOMIC_API_KEY")
+    # nomic_embeddings = NomicEmbeddings(model="nomic-embed-text-v1.5", nomic_api_key=NOMIC_API_KEY)
+    # return nomic_embeddings
 
 def stuff_vectordatabase(chunks, embeddings, collection_name, connection_str):
     ''' Function to load the chunks into the vector database '''

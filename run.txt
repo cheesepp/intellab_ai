@@ -7,3 +7,16 @@ python ./run_service.py
 python ./run_service.py -p 8006
 python ./src/researchs/rag/feed_data.py
 python ./src/service/feed_data.py
+
+# build docker image for mac os
+pip install build wheel
+mkdir -p build
+python -m build --wheel
+cp dist/*.whl build/
+
+# build docker image for windows
+pip install build wheel
+mkdir build
+python -m build --wheel
+copy dist\*.whl build\
+xcopy dist/*.whl build/
