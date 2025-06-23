@@ -96,6 +96,7 @@ async def message_generator(
     print(f"Agent ID: {agent_id}")
     print(f"is free plan: {subscription_plan == FREE_PLAN}")
 
+    # check if user dont login
     if (agent_id == GLOBAL_CHATBOT or agent_id == PROBLEM_CHATBOT or agent_id == LESSON_CHATBOT) and (subscription_plan is None or subscription_plan == ""):
         yield f"data: {json.dumps({'type': 'error', 'content': 'Please login to continue.'})}\n\n"
         return
@@ -105,27 +106,28 @@ async def message_generator(
         yield f"data: {json.dumps({'type': 'error', 'content': 'User does not have permission to access this agent. Please upgrade to premium plan.'})}\n\n"
         return
     
-    # check quote if user is using free or course plan
+    # check quota if user is using free or course plan
     try:
         current_usage_dict =  await get_current_usage(user_input.user_id, subscription_plan)
         remaining_usage = current_usage_dict["remaining_usage"]
+        is_unlimited_usage_problem_chatbot = current_usage_dict["unlimited"]
     except Exception as e:
         print(f"Error: {e}")
         remaining_usage = max_usage_problem_chatbot_per_plan(subscription_plan)
 
-    if (subscription_plan == FREE_PLAN or subscription_plan==COURSE_PLAN) and agent_id==PROBLEM_CHATBOT and remaining_usage <= 0:
+    if (subscription_plan == FREE_PLAN or subscription_plan == COURSE_PLAN) and agent_id==PROBLEM_CHATBOT and remaining_usage <= 0 and not is_unlimited_usage_problem_chatbot:
         yield f"data: {json.dumps({'type': 'error', 'content': 'Usage limit exceeded for today. Please upgrade your plan or try on next day.'})}\n\n"
         return
     
-
     try:
         current_usage_of_lesson_chatbot_dict =  await get_current_usage_of_lesson_chatbot(user_input.user_id, subscription_plan)
         remaining_usage_of_lesson_chatbot = current_usage_of_lesson_chatbot_dict["remaining_usage"]
+        is_unlimited_usage_lesson_chatbot = current_usage_of_lesson_chatbot_dict["unlimited"]
     except Exception as e:
         print(f"Error: {e}")
         remaining_usage_of_lesson_chatbot = max_usage_lesson_chatbot_per_plan(subscription_plan)
 
-    if (subscription_plan == FREE_PLAN or subscription_plan==PROBLEM_CHATBOT) and agent_id==LESSON_CHATBOT and remaining_usage_of_lesson_chatbot <= 0:
+    if (subscription_plan == FREE_PLAN or subscription_plan==PROBLEM_CHATBOT) and agent_id==LESSON_CHATBOT and remaining_usage_of_lesson_chatbot <= 0 and not is_unlimited_usage_lesson_chatbot:
         yield f"data: {json.dumps({'type': 'error', 'content': 'Usage limit exceeded for today. Please upgrade your plan or try on next day.'})}\n\n"
         return
     

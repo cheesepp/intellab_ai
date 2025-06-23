@@ -1,6 +1,7 @@
 from langchain.document_loaders import CSVLoader
 from langchain.indexes import VectorstoreIndexCreator
 from langchain.chains.retrieval import create_retrieval_chain
+from langchain_nomic import NomicEmbeddings
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 import os
 from langchain_core.runnables import (
@@ -87,10 +88,9 @@ Answer directly without phrases like "Based on the context" or "According to the
 
 # loader = CSVLoader(file_path='./documents/courses.csv')
 # problem_loader = CSVLoader(file_path='./documents/problems.csv')
-embeddings = OllamaEmbeddings(
-    model="nomic-embed-text",
-    base_url=OLLAMA_HOST
-)
+NOMIC_API_KEY = os.getenv("NOMIC_API_KEY")
+
+embeddings = NomicEmbeddings(model="nomic-embed-text-v1.5", nomic_api_key=NOMIC_API_KEY)
 # Create an index using the loaded documents
 index_creator = VectorstoreIndexCreator(embedding=embeddings)
 # docsearch = index_creator.from_loaders([problem_loader, loader])

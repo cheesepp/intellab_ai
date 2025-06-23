@@ -1,5 +1,6 @@
 from typing import List
 import uuid
+from langchain_nomic import NomicEmbeddings
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import psycopg2
@@ -23,7 +24,10 @@ from fpdf import FPDF
             
 from langchain.document_loaders import CSVLoader
 import asyncio
-connection_string = os.getenv("DB_CONNECTION_STRING")
+
+def get_connection_string():
+    return os.getenv("DB_CONNECTION_STRING")
+
 #connection_string = "postgresql://postgres:123456@localhost:5433/intellab-db"
 
 def get_lessons_with_metadata(connection_string: str):
@@ -417,6 +421,14 @@ def create_embeddings():
     ollama_embeddings = OllamaEmbeddings(model="nomic-embed-text", base_url="http://localhost:11434")
     return ollama_embeddings
 
+# TODO: Change here to use NomicEmbeddings when the API key is available
+def create_nomic_embeddings():
+    ''' Function to create vector embeddings '''
+    return create_embeddings()
+    # NOMIC_API_KEY = os.getenv("NOMIC_API_KEY")
+    # nomic_embeddings = NomicEmbeddings(model="nomic-embed-text-v1.5", nomic_api_key=NOMIC_API_KEY)
+    # return nomic_embeddings
+
 def stuff_vectordatabase(chunks, embeddings, collection_name, connection_str):
     ''' Function to load the chunks into the vector database '''
     ids = [str(uuid.uuid4()) for _ in chunks]
@@ -440,16 +452,16 @@ def feed_embedded_lesson_data() -> None:
 
     # print('connection string: ', connection_string)
     documents: List[Document] = []
-    lesson_documents = get_lessons_with_metadata(connection_string)
+    lesson_documents = get_lessons_with_metadata(get_connection_string())
     for doc in lesson_documents:
         #print('doc: ', doc["metadata"])
         document = Document(page_content=doc["page_content"], metadata=doc["metadata"])
         documents.append(document)
     print('documents length in main: ',len(documents))
     chunks = chunk_data(documents)
-    embeddings = create_embeddings()
+    embeddings = create_nomic_embeddings()
     print('STORING.......')
-    vectorstore = stuff_vectordatabase(chunks=documents,embeddings=embeddings,collection_name="lesson_content", connection_str=connection_string)
+    vectorstore = stuff_vectordatabase(chunks=documents,embeddings=embeddings,collection_name="lesson_content", connection_str=get_connection_string())
     #courses_data = read_csv_data("courses", connection_string, embeddings, "courses")
     #problems_data = read_csv_data("problems", connection_string, embeddings, "problems")
     print('DONE!')
@@ -457,16 +469,16 @@ def feed_embedded_lesson_data() -> None:
 
 def feed_embedded_course_data() -> None:
     documents: List[Document] = []
-    course_documents = get_courses_with_metadata(connection_string)
+    course_documents = get_courses_with_metadata(get_connection_string())
     for doc in course_documents:
         #print('doc: ', doc["metadata"])
         document = Document(page_content=doc["page_content"], metadata=doc["metadata"])
         documents.append(document)
     print('documents length in main: ',len(documents))
     chunks = chunk_data(documents)
-    embeddings = create_embeddings()
+    embeddings = create_nomic_embeddings()
     print('STORING.......')
-    vectorstore = stuff_vectordatabase(chunks=documents,embeddings=embeddings,collection_name="courses", connection_str=connection_string)
+    vectorstore = stuff_vectordatabase(chunks=documents,embeddings=embeddings,collection_name="courses", connection_str=get_connection_string())
     #courses_data = read_csv_data("courses", connection_string, embeddings, "courses")
     print('DONE!')
 
@@ -478,16 +490,16 @@ def feed_embedded_problem_data() -> None:
     #print('connection string: ', connection_string)
 
     documents: List[Document] = []
-    problem_documents = get_problems_with_metadata(connection_string)
+    problem_documents = get_problems_with_metadata(get_connection_string())
     for doc in problem_documents:
         #print('doc: ', doc["metadata"])
         document = Document(page_content=doc["page_content"], metadata=doc["metadata"])
         documents.append(document)
     print('documents length in main: ',len(documents))
     chunks = chunk_data(documents)
-    embeddings = create_embeddings()
+    embeddings = create_nomic_embeddings()
     print('STORING.......')
-    vectorstore = stuff_vectordatabase(chunks=documents,embeddings=embeddings,collection_name="problems", connection_str=connection_string)
+    vectorstore = stuff_vectordatabase(chunks=documents,embeddings=embeddings,collection_name="problems", connection_str=get_connection_string())
     print('DONE!')
     return
 
@@ -641,7 +653,7 @@ def embed_data_by_lesson_id(lesson_id: str) -> None:
     #connection_string = "postgresql://postgres:123456@localhost:5433/intellab-db"
     #connection_string = os.getenv("DB_CONNECTION_STRING")
     documents: List[Document] = []
-    lesson_documents = get_lesson_with_metadata_by_lesson_id(lesson_id, connection_string)
+    lesson_documents = get_lesson_with_metadata_by_lesson_id(lesson_id, get_connection_string())
     for doc in lesson_documents:
         document = Document(page_content=doc["page_content"], metadata=doc["metadata"])
         documents.append(document)
@@ -652,9 +664,9 @@ def embed_data_by_lesson_id(lesson_id: str) -> None:
         return
     
     chunks = chunk_data(documents)
-    embeddings = create_embeddings()
+    embeddings = create_nomic_embeddings()
     print('STORING.......')
-    vectorstore = stuff_vectordatabase(chunks=documents,embeddings=embeddings,collection_name="lesson_content", connection_str=connection_string)
+    vectorstore = stuff_vectordatabase(chunks=documents,embeddings=embeddings,collection_name="lesson_content", connection_str=get_connection_string())
     print('DONE!')
 
 def embed_data_by_course_id(course_id: str) -> None:
@@ -662,7 +674,7 @@ def embed_data_by_course_id(course_id: str) -> None:
     Function to embed data by course_id
     """
     documents: List[Document] = []
-    course_documents = get_course_with_metadata_by_course_id(course_id, connection_string)
+    course_documents = get_course_with_metadata_by_course_id(course_id, get_connection_string())
     for doc in course_documents:
         document = Document(page_content=doc["page_content"], metadata=doc["metadata"])
         documents.append(document)
@@ -673,9 +685,9 @@ def embed_data_by_course_id(course_id: str) -> None:
         return
 
     chunks = chunk_data(documents)
-    embeddings = create_embeddings()
+    embeddings = create_nomic_embeddings()
     print('STORING.......')
-    vectorstore = stuff_vectordatabase(chunks=documents,embeddings=embeddings,collection_name="courses", connection_str=connection_string)
+    vectorstore = stuff_vectordatabase(chunks=documents,embeddings=embeddings,collection_name="courses", connection_str=get_connection_string())
     print('DONE!')
 
 def embed_data_by_problem_id(problem_id: str) -> None:
@@ -686,7 +698,7 @@ def embed_data_by_problem_id(problem_id: str) -> None:
     #connection_string = "postgresql://postgres:123456@localhost:5433/intellab-db"
     #connection_string = os.getenv("DB_CONNECTION_STRING")
     documents: List[Document] = []
-    lesson_documents = get_problem_with_metadata_by_problem_id(problem_id, connection_string)
+    lesson_documents = get_problem_with_metadata_by_problem_id(problem_id, get_connection_string())
     for doc in lesson_documents:
         document = Document(page_content=doc["page_content"], metadata=doc["metadata"])
         documents.append(document)
@@ -697,9 +709,9 @@ def embed_data_by_problem_id(problem_id: str) -> None:
         return
     
     chunks = chunk_data(documents)
-    embeddings = create_embeddings()
+    embeddings = create_nomic_embeddings()
     print('STORING.......')
-    vectorstore = stuff_vectordatabase(chunks=documents,embeddings=embeddings,collection_name="problems", connection_str=connection_string)
+    vectorstore = stuff_vectordatabase(chunks=documents,embeddings=embeddings,collection_name="problems", connection_str=get_connection_string())
     #courses_data = read_csv_data("courses", connection_string, embeddings, "courses")
     print('DONE!')
 
@@ -916,7 +928,7 @@ def update_embedded_data_by_lesson_id(lesson_id: str) -> None:
     #connection_string = os.getenv("DB_CONNECTION_STRING")
     #connection_string = "postgresql://postgres:123456@localhost:5433/intellab-db"
     documents: List[Document] = []
-    lesson_documents = get_lesson_with_metadata_by_lesson_id(lesson_id, connection_string)
+    lesson_documents = get_lesson_with_metadata_by_lesson_id(lesson_id, get_connection_string())
     for doc in lesson_documents:
         document = Document(page_content=doc["page_content"], metadata=doc["metadata"])
         documents.append(document)
@@ -927,11 +939,11 @@ def update_embedded_data_by_lesson_id(lesson_id: str) -> None:
         return
 
     chunks = chunk_data(documents)
-    embeddings = create_embeddings()
+    embeddings = create_nomic_embeddings()
     
     # 1. Connect to the vector store
     vectorstore = PGVector(
-        connection=connection_string,
+        connection=get_connection_string(),
         collection_name="lesson_content",
         embeddings=embeddings,
         use_jsonb=True
@@ -945,7 +957,7 @@ def update_embedded_data_by_lesson_id(lesson_id: str) -> None:
     print('DELETING OLD VECTORS...')
     deleted_rows = delete_embeddings_by_lesson_id(
         lesson_id=lesson_id,
-        connection_string=connection_string,
+        connection_string=get_connection_string(),
         collection_name="lesson_content"
     )
     print(f"Successfully deleted {(deleted_rows)} embeddings with lesson_id '{lesson_id}'.")
@@ -986,7 +998,7 @@ def update_lessons_embedded_data_by_course_id(course_id: str) -> None:
     Function to update embedded data by course_id
     """
     documents: List[Document] = []
-    lesson_documents = get_lessons_with_metadata_by_course_id(course_id, connection_string)
+    lesson_documents = get_lessons_with_metadata_by_course_id(course_id, get_connection_string())
     for doc in lesson_documents:
         document = Document(page_content=doc["page_content"], metadata=doc["metadata"])
         documents.append(document)
@@ -997,11 +1009,11 @@ def update_lessons_embedded_data_by_course_id(course_id: str) -> None:
         return
     
     chunks = chunk_data(documents)
-    embeddings = create_embeddings()
+    embeddings = create_nomic_embeddings()
     
     # 1. Connect to the vector store
     vectorstore = PGVector(
-        connection=connection_string,
+        connection=get_connection_string(),
         collection_name="lesson_content",
         embeddings=embeddings,
         use_jsonb=True
@@ -1015,7 +1027,7 @@ def update_lessons_embedded_data_by_course_id(course_id: str) -> None:
     print('DELETING OLD VECTORS...')
     deleted_rows = delete_lessons_embeddings_by_course_id(
         course_id=course_id,
-        connection_string=connection_string,
+        connection_string=get_connection_string(),
         collection_name="lesson_content"
     )
     print(f"Successfully deleted {(deleted_rows)} lessons embeddings with course_id '{course_id}'.")
@@ -1052,7 +1064,7 @@ def update_course_embedded_data_by_course_id(course_id: str) -> None:
     Function to update embedded data by course_id
     """
     documents: List[Document] = []
-    course_documents = get_course_with_metadata_by_course_id(course_id, connection_string)
+    course_documents = get_course_with_metadata_by_course_id(course_id, get_connection_string())
     for doc in course_documents:
         document = Document(page_content=doc["page_content"], metadata=doc["metadata"])
         documents.append(document)
@@ -1063,11 +1075,11 @@ def update_course_embedded_data_by_course_id(course_id: str) -> None:
         return
 
     chunks = chunk_data(documents)
-    embeddings = create_embeddings()
+    embeddings = create_nomic_embeddings()
 
     # 1. Connect to the vector store
     vectorstore = PGVector(
-        connection=connection_string,
+        connection=get_connection_string(),
         collection_name="courses",
         embeddings=embeddings,
         use_jsonb=True
@@ -1076,7 +1088,7 @@ def update_course_embedded_data_by_course_id(course_id: str) -> None:
     print('DELETING OLD VECTORS...')
     deleted_rows = delete_course_embeddings_by_course_id(
         course_id=course_id,
-        connection_string=connection_string,
+        connection_string=get_connection_string(),
         collection_name="courses"
     )
     print(f"Successfully deleted {(deleted_rows)} course embeddings with course_id '{course_id}'.")
@@ -1093,7 +1105,7 @@ def update_embedded_data_by_problem_id(problem_id: str) -> None:
     #connection_string = os.getenv("DB_CONNECTION_STRING")
     #connection_string = "postgresql://postgres:123456@localhost:5433/intellab-db"
     documents: List[Document] = []
-    lesson_documents = get_problem_with_metadata_by_problem_id(connection_string, problem_id)
+    lesson_documents = get_problem_with_metadata_by_problem_id(problem_id, get_connection_string())
     for doc in lesson_documents:
         document = Document(page_content=doc["page_content"], metadata=doc["metadata"])
         documents.append(document)
@@ -1104,11 +1116,11 @@ def update_embedded_data_by_problem_id(problem_id: str) -> None:
         return    
 
     chunks = chunk_data(documents)
-    embeddings = create_embeddings()
+    embeddings = create_nomic_embeddings()
     
     # 1. Connect to the vector store
     vectorstore = PGVector(
-        connection=connection_string,
+        connection=get_connection_string(),
         collection_name="problems",
         embeddings=embeddings,
         use_jsonb=True
@@ -1122,7 +1134,7 @@ def update_embedded_data_by_problem_id(problem_id: str) -> None:
     print('DELETING OLD VECTORS...')
     deleted_rows = delete_embeddings_by_problem_id(
         problem_id=problem_id,
-        connection_string=connection_string,
+        connection_string=get_connection_string(),
         collection_name="problems"
     )
     print(f"Successfully deleted {(deleted_rows)} embeddings with problem_id '{problem_id}'.")

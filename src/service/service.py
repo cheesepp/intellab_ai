@@ -97,17 +97,21 @@ def verify_bearer(
 #         yield
 #     # context manager will clean up the AsyncSqliteSaver on exit
 
+
+def get_connection_string():
+    return os.getenv("DB_CONNECTION_STRING")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Construct agent with Sqlite checkpointer
     # TODO: It's probably dangerous to share the same checkpointer on multiple agents
     
     #TODO: Uncomment the following line if you want to initialize the vector database on startup
-    await initialize_vector_database()
+    # await initialize_vector_database()
 
     async with AsyncConnectionPool(
         # Example configuration
-        conninfo=os.getenv("DB_CONNECTION_STRING"),
+        conninfo=get_connection_string(),
         max_size=20,
         kwargs={
             "autocommit": True,

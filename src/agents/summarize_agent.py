@@ -2,6 +2,7 @@ import operator
 import os
 import re
 from typing import Literal
+from langchain_nomic import NomicEmbeddings
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain import hub
 from langchain_community.document_loaders import WebBaseLoader
@@ -30,19 +31,29 @@ from langchain.chains.combine_documents.reduce import (
 from core import settings
 from core.llm import get_model
 
-DB_CONNECTION_STRING = os.getenv("DB_CONNECTION_STRING")
-OLLAMA_HOST = os.getenv("OLLAMA_HOST")
 # DB_CONNECTION_STRING = "postgresql://postgres:123456@localhost:5433/intellab-db"
 # OLLAMA_HOST="http://localhost:11434"
 
+def get_db_connection():
+    return os.getenv("DB_CONNECTION_STRING")
+
+def get_ollama_host():
+    return os.getenv("OLLAMA_HOST")
+
 def create_embeddings():
+    # ''' Function to create vector embeddings '''
+    # ollama_host = get_ollama_host()
+    # ollama_embeddings = OllamaEmbeddings(model="nomic-embed-text", base_url=ollama_host)
+    # return ollama_embeddings
     ''' Function to create vector embeddings '''
-    ollama_embeddings = OllamaEmbeddings(model="nomic-embed-text", base_url=OLLAMA_HOST)
-    return ollama_embeddings
+    NOMIC_API_KEY = os.getenv("NOMIC_API_KEY")
+    nomic_embeddings = NomicEmbeddings(model="nomic-embed-text-v1.5", nomic_api_key=NOMIC_API_KEY)
+    return nomic_embeddings
 
-embeddings = create_embeddings()
+def get_vectorstore():
+    return PGVector(embeddings=create_embeddings(), collection_name="lesson_content", connection=get_db_connection(), use_jsonb=True)
 
-vectorstore = PGVector(embeddings=embeddings, collection_name="lesson_content", connection=DB_CONNECTION_STRING, use_jsonb=True)
+vectorstore = get_vectorstore()
 
 
 map_template = """You are an expert at summarizing programming education content. Your task is to create clear, concise summaries of individual lessons.
@@ -137,7 +148,8 @@ def retrieve(state: State):
 # contain -> finalize response, otherwise generate
 
 # Define your database connection
-DB_ENGINE = create_engine(DB_CONNECTION_STRING)
+def get_db_engine():
+    return create_engine(get_db_connection())
 
 # ---- Check Contained Summary Conditional Node ----
 def check_contained_summary(state: dict) -> Literal["retrieve_existing", "retrieve"]:
@@ -152,7 +164,7 @@ def check_contained_summary(state: dict) -> Literal["retrieve_existing", "retrie
         WHERE course_name = :course_name
     """)
     
-    with DB_ENGINE.connect() as conn:
+    with get_db_engine().connect() as conn:
         result = conn.execute(query, {"course_name": course_name}).fetchone()
     
     if not result or result[0] == '' or regenerate:
@@ -176,7 +188,7 @@ def retrieve_existing(state: dict):
         WHERE course_name = :course_name
     """)
 
-    with DB_ENGINE.connect() as conn:
+    with get_db_engine().connect() as conn:
         result = conn.execute(query, {"course_name": course_name}).fetchone()
     
     if result is None:

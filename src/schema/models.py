@@ -31,6 +31,12 @@ class OpenAIModelName(StrEnum):
     GPT_4O_MINI = "gpt-4o-mini"
     GPT_4O = "gpt-4o"
     ChatGPT_4O = "chatgpt-4o"
+    OPENAI_O3 = "openai-o3-mini"
+    LLAMA_GUARD_4_12B = "llama-guard-4-12b"
+    LLAMA_GUARD_3_8B = "llama-guard-3-8b"
+    DEEPSEEK_R1_7B = "deepseek-r1:7b"
+    DEEPSEEK_R1_8B = "deepseek-r1:8b"
+
 
 
 class AnthropicModelName(StrEnum):
