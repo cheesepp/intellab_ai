@@ -132,7 +132,15 @@ async def llama_guard_output(state: State, config: RunnableConfig) -> State:
     # return {"output_safety": safety_output}
     checking_template = """You are an expert at determining whether an input is relevant to programming or casual conversation that should be allowed in a programming-focused chatbot.
 
-    User input: {question}
+    Analyze the 'Latest User Input' based on the 'Conversation Summary' and 'Recent Conversation History' to understand the context.
+
+    Conversation Summary:
+    {summary}
+
+    Recent Conversation History:
+    {conversation_history}
+
+    Latest User Input: {question}
 
     Your task is to:
     1. Analyze the input carefully
@@ -156,6 +164,16 @@ async def llama_guard_output(state: State, config: RunnableConfig) -> State:
     - Follow-up questions that might appear irrelevant in isolation but are likely part of a programming conversation
     - Questions about career advice in programming/software development
     - Any ambiguous question that could reasonably relate to programming
+
+    Input: "Hi, who are you?"
+    Output:
+    relevant
+    This is a casual greeting that is appropriate for a programming-focused chatbot.
+
+    Input: "Can you introduce yourself?"
+    Output:
+    relevant
+    This is a casual conversation that is appropriate for a programming-focused chatbot.
 
     Examples:
     Input: "How do I implement a binary search in Python?"
@@ -187,7 +205,19 @@ async def llama_guard_output(state: State, config: RunnableConfig) -> State:
     model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     checking_output = prompt | model
     messages = state["messages"]
-    response = await checking_output.ainvoke({"question": messages[-1].content})
+    summary = state.get("summary", "No summary yet.")
+    conversation_history = "\n\n".join(
+        [
+            f"Human: {m.content}" if isinstance(m, HumanMessage) else f"AI: {m.content}"
+            for m in messages
+        ]
+    )
+
+    response = await checking_output.ainvoke({
+        "summary": summary,
+        "conversation_history": conversation_history,
+        "question": messages[-1].content
+        })
     llama_guard = parse_llama_guard_relevant_topic(response.content)
     return {"is_relevant": llama_guard}
 
@@ -223,11 +253,12 @@ def extract_message(state: State):
         return {"lesson_name": "", "question": ""}
 
 def retrieve(state: State):
-    lesson_name = state["lesson_name"]
-    retrieved_docs = vectorstore.as_retriever(search_kwargs={'k': 1, 'filter': {'lesson_name': lesson_name}})
-    docs = retrieved_docs.invoke(lesson_name)
-    print(f"======== LESSON NAME: {lesson_name} DOCS: {docs}==========")
-    return {"lesson": docs[0].page_content if len(docs) > 0 else ""}
+    # lesson_name = state["lesson_name"]
+    # retrieved_docs = vectorstore.as_retriever(search_kwargs={'k': 1, 'filter': {'lesson_name': lesson_name}})
+    # docs = retrieved_docs.invoke(lesson_name)
+    # print(f"======== LESSON NAME: {lesson_name} DOCS: {docs}==========")
+    # return {"lesson": docs[0].page_content if len(docs) > 0 else ""}
+    return {"lesson": state["lesson_name"]}
 
 
 # Define the logic to call the model
@@ -237,6 +268,7 @@ async def acall_model(state: State, config: RunnableConfig):
     
     print(f"======== {lesson} ==========")
     model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
+    model.max_tokens = 100
     # model = ChatOllama(model="codeqwen", base_url=OLLAMA_HOST)
     print(f"------- CALL MODEL ----------")
     # If a summary exists, we add this in as a system message

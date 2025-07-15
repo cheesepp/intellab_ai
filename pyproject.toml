@@ -3,7 +3,7 @@ name = "agent-service-toolkit"
 version = "0.1.0"
 description = "Full toolkit for running an AI agent service built with LangGraph, FastAPI and Streamlit"
 readme = "README.md"
-authors = [{ name = "Joshua Carroll", email = "carroll.joshk@gmail.com" }]
+authors = [{ name = "Intellab", email = "intellab.official@gmail.com" }]
 classifiers = [
     "Development Status :: 4 - Beta",
     "License :: OSI Approved :: MIT License",
@@ -54,6 +54,7 @@ dependencies = [
     "pyyaml>=6.0.2",
     "langchain-huggingface>=0.1.2",
     "langchain-nomic>=0.1.4",
+    "chromadb>=1.0.13",
 ]
 
 [dependency-groups]

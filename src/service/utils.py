@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
+import hashlib
 import json
 import re
+import uuid
 from fastapi import HTTPException
 from langchain_core.messages import (
     AIMessage,
@@ -29,7 +31,7 @@ def _parse_input(user_input: UserInput) -> tuple[dict[str, Any], UUID, UUID]:
     kwargs = {
         "input": {"messages": [HumanMessage(content=user_input.message)]},
         "config": RunnableConfig(
-            configurable={"thread_id": thread_id, "model": user_input.model}, run_id=run_id
+            configurable={"thread_id": thread_id, "model": user_input.model, "user_id": user_input.user_id}, run_id=run_id
         ),
     }
     return kwargs, run_id, thread_id
@@ -195,18 +197,20 @@ async def store_chat_history(user_input: UserInput, ai_output: ChatMessage, thre
 
 def extract_message(message):
         print (f"========= {message} ============")
-        pattern = r"Problem:\s*(.*?)\s*Problem_id:\s*(\S+)\s*Question:\s*(.+)"
+        pattern = r"Problem:\s*(.*?)\s*Problem_id:\s*(\S+)\s*Code:\s*(.*?)\s*Question:\s*(.+)"
 
         match = re.search(pattern, message, re.DOTALL)
         print (f"========= {match} ============")
         if match:
             problem_content = match.group(1)
             problem_id = match.group(2)
-            question = match.group(3)
+            code = match.group(3)
+            question = match.group(4)
             print("Problem Content:", problem_content)
             print("Problem ID:", problem_id)
+            print("Source code:", code)
             print("Question:", question)
-            return {"problem": problem_content, "problem_id": problem_id, "question": question}
+            return {"problem": problem_content, "problem_id": problem_id, "question": question, "source_code": code}
         else:
             return {"problem": "", "problem_id": "", "question": ""}
 
@@ -234,6 +238,7 @@ async def store_problem_chat_history(user_input: UserInput, ai_output: ChatMessa
     
     user_id = user_input.user_id
     thread_id = thread_id
+    print(f"========= USER INPUT MESSAGE {user_input.message} ============")
     extracted_message = extract_message(user_input.message)
     human_message = extracted_message["question"]
     problem_id = extracted_message["problem_id"]
@@ -294,11 +299,24 @@ async def store_problem_chat_history(user_input: UserInput, ai_output: ChatMessa
                     "messages": [user_entry, ai_entry]
                 }
 
-                problem_chatbot_collection.update_one(
+                result = problem_chatbot_collection.update_one(
                     {"user_id": user_id},
                     {"$push": {"conversations": new_conversation}},
                     upsert=True
                 )
+                
+                # Verify the conversation was added successfully
+                if result.modified_count > 0 or result.upserted_id:
+                    # Double-check by querying the database
+                    verification = problem_chatbot_collection.find_one(
+                        {"user_id": user_id, "conversations": {"$elemMatch": {"thread_id": thread_id, "problem_id": problem_id}}}
+                    )
+                    if verification:
+                        print({"message": "New conversation created and verified", "thread_id": thread_id, "problem_id": problem_id})
+                    else:
+                        print({"warning": "Conversation creation verification failed", "thread_id": thread_id})
+                else:
+                    print({"error": "Failed to create new conversation", "thread_id": thread_id})
                 print({"message": "New conversation created", "thread_id": thread_id})   
         else:
             raise HTTPException(status_code=500, detail="Internal Server Error")
@@ -518,6 +536,7 @@ async def store_problem_title(user_input: UserInput, output: str, thread_id: str
     conversation = problem_chatbot_collection.find_one(
         {"user_id": user_id, "conversations": {"$elemMatch": {"thread_id": thread_id, "problem_id": problem_id}}}
     )
+    print(f"CONTAIN CONVERSATION {conversation}")
 
     if conversation:
         # Update the specific conversation's title within the conversations array
@@ -693,3 +712,46 @@ def save_to_pdf(markdown_content, path, values):
     except Exception as e:
         print(f"Error saving PDF: {e}")
         exit(1)
+
+def normalize_uid(uid: str) -> uuid.UUID:
+    """
+    Convert a Firebase UID to a normalized UUID using SHA-256 hash.
+    
+    Args:
+        uid (str): The Firebase UID string to normalize
+        
+    Returns:
+        uuid.UUID: A UUID generated from the first 16 bytes of the SHA-256 hash
+        
+    Raises:
+        RuntimeError: If there's an error during the conversion process
+    """
+    try:
+        # Use SHA-256 to hash the Firebase UID
+        md = hashlib.sha256()
+        md.update(uid.encode('utf-8'))
+        hash_bytes = md.digest()
+        
+        # Create UUID from the first 16 bytes of the hash
+        most_significant_bits = 0
+        least_significant_bits = 0
+        
+        # Process first 8 bytes for most significant bits
+        for i in range(8):
+            most_significant_bits |= (hash_bytes[i] & 0xff) << (8 * (7 - i))
+        
+        # Process next 8 bytes for least significant bits
+        for i in range(8, 16):
+            least_significant_bits |= (hash_bytes[i] & 0xff) << (8 * (15 - i))
+        
+        # Create UUID from the two 64-bit values
+        # Convert to signed 64-bit integers if needed
+        if most_significant_bits >= 2**63:
+            most_significant_bits -= 2**64
+        if least_significant_bits >= 2**63:
+            least_significant_bits -= 2**64
+            
+        return uuid.UUID(bytes=hash_bytes[:16])
+        
+    except Exception as e:
+        raise RuntimeError(f"Error while converting UID to UUID: {str(e)}")

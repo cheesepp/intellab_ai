@@ -100,6 +100,7 @@ class State(MessagesState):
     summaries: Annotated[list, operator.add]
     collapsed_summaries: List[Document]
     regenerate: bool
+    token_count: Annotated[int, operator.add]
 
 token_max = 100000
 def length_function(documents: List[Document], llm: BaseChatModel) -> int:
@@ -135,7 +136,8 @@ def extract_message(state: State):
     return {
         "course_name": extract_values["course_name"],
         "course_id": extract_values["course_id"],
-        "regenerate": extract_values["regenerate"]
+        "regenerate": extract_values["regenerate"],
+        "token_count": 0  # Initialize token count
     }
     
 def retrieve(state: State):
@@ -203,13 +205,25 @@ def retrieve_existing(state: dict):
 # documents to in order to generate summaries
 class SummaryState(TypedDict):
     content: str
+    token_count: int  # Add token count to summary state
     
 # Here we generate a summary, given a document
 async def generate_summary(state: SummaryState, config: RunnableConfig):
     prompt = map_prompt.invoke(state["content"])
     llm = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     response = await llm.ainvoke(prompt)
-    return {"summaries": [response.content]}
+    print(f"-------- GENERATE SUMMARY --------{response}")
+    
+    # Extract token usage from response
+    token_usage = 0
+    if hasattr(response, 'usage_metadata') and response.usage_metadata:
+        token_usage = response.usage_metadata.get("total_tokens", 0)
+        print(f"Token usage for this summary: {token_usage}")
+    
+    return {
+        "summaries": [response.content],
+        "token_count": token_usage  # Return just the token usage for this call
+    }
 
 
 # Here we define the logic to map out over the documents
@@ -220,20 +234,30 @@ def map_summaries(state: State):
     # Each `Send` object consists of the name of a node in the graph
     # as well as the state to send to that node
     return [
-        Send("generate_summary", {"content": content}) for content in state["context"]
+        Send("generate_summary", {"content": content}) 
+        for content in state["context"]
     ]
 
 def collect_summaries(state: State):
     print("============ COLLECT SUMMARIES ================")
+    # Print current accumulated token count from all generate_summary responses
+    print(f"Total tokens from generate_summary calls: {state.get('token_count', 0)}")
     return {
         "collapsed_summaries": [Document(summary) for summary in state["summaries"]]
     }
 
 
-async def _reduce(input: dict, llm: BaseChatModel) -> str:
+async def _reduce(input: dict, llm: BaseChatModel) -> tuple[str, int]:
     prompt = reduce_prompt.invoke(input)
     response = await llm.ainvoke(prompt)
-    return response.content
+    
+    # Extract token usage from response
+    token_usage = 0
+    if hasattr(response, 'usage_metadata') and response.usage_metadata:
+        token_usage = response.usage_metadata.get("total_tokens", 0)
+        print(f"Token usage for final reduce: {token_usage}")
+    
+    return response.content, token_usage
   
 # Add node to colbasechatlapse summaries
 async def collapse_summaries(state: State):
@@ -311,17 +335,38 @@ def store_summary(state: State):
 async def generate_final_summary(state: State, config: RunnableConfig):
     print("-------- GENERATE FINAL SUMMARY --------")
     llm = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    response = await _reduce(state["collapsed_summaries"], llm=llm)
+    
+    # Get current token count from all previous generate_summary calls
+    current_token_count = state.get("token_count", 0)
+    
+    # _reduce now returns both content and token usage
+    response_content, final_summary_tokens = await _reduce(state["collapsed_summaries"], llm=llm)
     summaries = state["collapsed_summaries"]
     combine_summary = "\n\n".join([summary.page_content for summary in summaries])
-    combine_summary = combine_summary + f"\n\n{response}"
-    return {"answer": combine_summary}
+    combine_summary = combine_summary + f"\n\n{response_content}"
+    
+    print(f"Total tokens used: {current_token_count + final_summary_tokens} (Previous: {current_token_count}, Final reduce: {final_summary_tokens})")
+    
+    return {
+        "answer": combine_summary,
+        "token_count": final_summary_tokens  # Add final summary tokens to the accumulated total
+    }
 
 # ---- finalize response node ----
 def finalize_response(state: State):
     print("---FINALIZING THE RESPONSE---")
     print(state["answer"])
-    return {"messages": [AIMessage(content=state["answer"])]}
+    print(f"Final total token count: {state.get('token_count', 0)}")
+    
+    # Create an AI message with token usage information in metadata
+    ai_message = AIMessage(
+        content=state["answer"],
+        additional_kwargs={
+            "token_count": state.get("token_count", 0)
+        }
+    )
+    
+    return {"messages": [ai_message], "token_count": state.get("token_count", 0)}
 
 # Construct the graph
 # Nodes:

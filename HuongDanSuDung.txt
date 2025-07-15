@@ -1,0 +1,135 @@
+HƯỚNG DẪN SỬ DỤNG - INTELLAB AI SYSTEM
+=====================================
+
+1. TỔNG QUAN HỆ THỐNG
+--------------------
+IntelLab AI System bao gồm:
+- Agent Service: Backend API với các AI agents
+- Research Tools: Các notebook và tools nghiên cứu
+
+2. CHẠY HỆ THỐNG TRONG MÔI TRƯỜNG DEVELOPMENT
+--------------------------------------------
+
+a) Kích hoạt môi trường Python:
+   - Nếu dùng venv: source venv/bin/activate (Linux/macOS) hoặc venv\Scripts\activate (Windows)
+
+b) Chạy Agent Service (Backend):
+   python src/run_service.py
+
+   Service sẽ chạy trên: http://localhost:8006
+
+d) Chạy Agent trực tiếp (Testing):
+   python src/run_agent.py
+
+3. CHẠY HỆ THỐNG VỚI DOCKER
+---------------------------
+
+a) Build và chạy toàn bộ hệ thống:
+   docker compose -f compose.yaml up --build -d
+
+d) Dừng hệ thống:
+   docker-compose down
+
+4. CÁC MODES CHẠY HỆ THỐNG
+-------------------------
+
+a) Development Mode:
+   - Có hot-reload
+   - Debug logs enabled
+   
+   Thiết lập: export DEV_MODE=dev
+
+b) Production Mode:
+   - Optimized performance
+   - Production logging
+   
+   Thiết lập: export DEV_MODE=prod
+
+5. SỬ DỤNG CÁC AGENTS
+--------------------
+
+Hệ thống có các agents chính:
+
+a) Lesson Chatbot:
+   - Trả lời câu hỏi về bài học
+   - Endpoint: /lesson_chatbot
+
+b) Problem Chatbot:
+   - Hỗ trợ giải quyết bài tập
+   - Endpoint: /problem_chatbot
+
+c) Global Chatbot:
+   - Chat tổng quát
+   - Endpoint: /global_chatbot
+
+d) Summarize Agent:
+   - Agent tóm tắt bài học
+   - Endpoint: /summarize_assistant
+
+e) Title Generator:
+   - Agent tạo tiêu đề cho hội thoại
+   - Endpoint: /title_generator
+
+6. API ENDPOINTS
+---------------
+
+a) Agent Service Base URL: http://localhost:8006
+
+b) Main Endpoints:
+   - GET /: Health check
+   - POST /invoke: Gọi agent đồng bộ
+   - POST /stream: Stream response từ agent
+   - GET /threads: Lấy danh sách threads
+   - POST /threads: Tạo thread mới
+   Các endpoint /invoke và /stream sẽ đứng trước các endpoint agents để phản hồi đồng bộ hoặc stream
+
+7. RESEARCH VÀ DEVELOPMENT
+-------------------------
+
+ Jupyter Notebooks trong src/researchs/: thư mục dùng cho mục đích nghiên cứu và thực nghiệm các hô mình
+   - chatbot.ipynb: Thực nghiệm chatbot
+   - test_summary.ipynb: Test summarization
+   - embedding.ipynb: Thực nghiệm với embeddings
+   ...
+
+8. CONFIGURATION
+----------------
+
+a) Environment variables (file .env):
+   - API_KEYS: OpenAI, Anthropic, Groq, Google, Nomic embeddings
+   - DATABASE_URL: PostgreSQL, MongoDB connection
+   - DEV_MODE: prod/dev
+   - OPEN ROUTER URL
+
+b) Agent configuration:
+   - Trong src/agents/ các file agents.py
+   - Model selection trong core/llm.py
+   - Prompts trong schema/prompts.py
+
+a) Agent không response:
+   - Kiểm tra API keys
+   - Kiểm tra network connection
+   - Xem service logs
+
+d) Database lỗi:
+   Kiểm tra connection string
+
+9. DEPLOYMENT
+--------------
+
+Sử dụng Docker command line để đưa lên docker hub:
+
+docker buildx build \                       
+--platform linux/amd64,linux/arm64 \
+-f docker/Dockerfile.service \
+-t doublecreamcheze/intellab_ops:ai-service-latest \
+--no-cache \
+--push \
+.
+
+10. GHI CHÚ QUAN TRỌNG
+----------------------
+- Đảm bảo đã cài đặt dependencies theo HuongDanCaiDat.txt
+- Cần có API keys hợp lệ để agents hoạt động
+- Sử dụng Python 3.11 hoặc 3.12
+- Đọc logs để debug khi có lỗi

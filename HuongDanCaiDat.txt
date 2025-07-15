@@ -1,0 +1,66 @@
+HƯỚNG DẪN CÀI ĐẶT - INTELLAB AI SYSTEM
+=====================================
+
+1. YÊU CẦU HỆ THỐNG
+------------------
+- Python 3.11 hoặc 3.12 (không hỗ trợ Python 3.13+)
+- Docker (để chạy trong container)
+- PostgresSQL
+- MongoDB
+- UV package manager để tải các thư viện cần thiết
+
+2. CÀI ĐẶT MÔI TRƯỜNG PYTHON
+-----------------------------
+a) Cài đặt Python 3.11 hoặc 3.12:
+    - Tải từ https://www.python.org/downloads/
+
+b) Kiểm tra phiên bản Python:
+    python --version
+
+c) Tạo môi trường ảo (Virtual Environment):
+    python -m venv venv
+
+d) Kích hoạt môi trường ảo:
+    - Windows: venv\Scripts\activate
+    - macOS/Linux: source venv/bin/activate
+
+3. CÀI ĐẶT UV PACKAGE MANAGER
+-------------------------------------------
+Sử dụng command line: pip install uv
+
+4. CÀI ĐẶT THƯ VIỆN VÀ DEPENDENCIES
+-----------------------------------
+a) Để cài đặt tất cả dependencies:
+    uv sync --frozen
+
+b) Để cài đặt chỉ production dependencies:
+    uv sync --frozen --no-dev
+
+5. CẤU HÌNH BIẾN MÔI TRƯỜNG
+---------------------------
+a) Cập nhật các API keys cần thiết trong file .env
+b) Cập nhật các URI kết nối đến các cơ sở dữ liệu
+c) Thiết lập chế độ (MODE) production hoặc development cho môi trường được sử dụng
+
+
+6. CÀI ĐẶT DOCKER
+-----------------------------
+a) Tải và cài đặt Docker Desktop:
+   - https://www.docker.com/products/docker-desktop
+
+b) Kiểm tra Docker đã cài đặt:
+   docker --version
+   docker-compose --version
+
+7. CÀI ĐẶT CƠ SỞ DỮ LIỆU
+------------------------------------
+Hệ thống hỗ trợ nhiều loại database:
+a) PostgreSQL
+b) MongoDB
+
+Đối với MongoDB, cần tạo database và collections:
+   - Database name: chat_db
+   - Collections:
+     + chatbot_histories (cho global chatbot)
+     + problem_chatbot_histories (cho problem chatbot)
+     + lesson_chatbot_histories (cho lesson chatbot)

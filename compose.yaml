@@ -1,16 +1,10 @@
 services:
   agent_service:
-    # healthcheck:
-    #   # test: ["CMD", "curl", "-f", "http://localhost:80"]
-    #   test: ["CMD", "echo", "hehe"]
-    #   interval: 10s
-    #   timeout: 5s
-    #   retries: 3
     build:
       context: .
       dockerfile: docker/Dockerfile.service
     ports:
-      - "8106:8006"
+      - "8006:8006"
     env_file:
       # - .env
       - docker.env
@@ -25,26 +19,3 @@ services:
         - path: src/service/
           action: sync+restart
           target: /app/service/
-
-  # streamlit_app:
-  #   build:
-  #     context: .
-  #     dockerfile: docker/Dockerfile.app
-  #   ports:
-  #     - "8501:8501"
-  #   depends_on:
-  #     agent_service:
-  #       condition: service_healthy
-  #   environment:
-  #     - AGENT_URL=http://agent_service:80
-  #   develop:
-  #     watch:
-  #       - path: src/client/
-  #         action: sync+restart
-  #         target: /app/client/
-  #       - path: src/schema/
-  #         action: sync+restart
-  #         target: /app/schema/
-  #       - path: src/streamlit_app.py
-  #         action: sync+restart
-  #         target: /app/streamlit_app.py

@@ -48,7 +48,7 @@ class UserInput(BaseModel):
         title="Model",
         description="LLM Model to use for the agent.",
         default=OllamaModelName.LLAMA3_2,
-        examples=[OllamaModelName.LLAMA3_2, AnthropicModelName.HAIKU_35],
+        examples=[OllamaModelName.LLAMA3_2],
     )
     problem_title: str | None = Field(
         description="Check whether user want to generate title from problem",

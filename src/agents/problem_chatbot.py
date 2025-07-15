@@ -13,6 +13,8 @@ from langgraph.checkpoint.memory import MemorySaver
 import re
 from typing import Literal, TypedDict
 from pydantic import BaseModel, Field
+from agents.global_chatbot import format_is_relevant_message, format_safety_message
+from agents.llama_guard import LlamaGuard, LlamaGuardOutput, SafetyAssessment, parse_llama_guard_relevant_topic
 from core import settings
 from core.llm import get_model
 from core.prompt_manager import PromptManager
@@ -23,7 +25,10 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST")
 class AgentState(MessagesState):
     problem: str
     question: str
+    source_code: str
     summary: str
+    safety: LlamaGuardOutput
+    is_relevant: LlamaGuardOutput
     
 class CheckRequireSolving(TypedDict):
   """"""
@@ -68,7 +73,7 @@ async def route_query(state: AgentState, config:RunnableConfig) -> Literal["mode
   
   # llm = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
   # llm = ChatOllama(model="llama3.2", base_url=OLLAMA_HOST)
-  llm = ChatOpenAI(model="google/gemini-2.0-flash-001", base_url=os.getenv("OPENROUTER_BASE"))
+  llm = ChatOpenAI(model="openai/gpt-4o-mini", base_url=os.getenv("OPENROUTER_BASE"))
   
   ROUTE_QUERY_PROMPT = ChatPromptTemplate.from_template(prompt_manager.PROBLEM_ROUTE_TEMPLATE)
   
@@ -133,6 +138,7 @@ async def reviewer(state: AgentState, config: RunnableConfig):
   
   problem = state["problem"]
   question = state["question"]
+  code = state["source_code"]
   summary = state.get("summary", "")
   if summary:
     system_message = f"Summary of conversation earlier: {summary}"
@@ -143,6 +149,7 @@ async def reviewer(state: AgentState, config: RunnableConfig):
   reviewer_model = {
         "conversation": RunnableLambda(lambda _: m_as_string),
         "problem": RunnableLambda(lambda _: problem),
+        "source_code": RunnableLambda(lambda _: code),
         "question": RunnableLambda(lambda _: question),
       } | reviewer_prompt | llm
   
@@ -153,26 +160,33 @@ async def reviewer(state: AgentState, config: RunnableConfig):
 def extract_message(state: AgentState):
     message = state["messages"][-1].content
     print (f"========= GO {message} ============")
-    pattern = r"Problem:\s*(.*?)\s*Problem_id:\s*(\S+)\s*Question:\s*(.+)"
+    pattern = r"Problem:\s*(.*?)\s*Problem_id:\s*(\S+)\s*Code:\s*(.*?)\s*Question:\s*(.+)"
 
     match = re.search(pattern, message, re.DOTALL)
     print (f"========= MATCH {match} ============")
     if match:
         problem_content = match.group(1)
         problem_id = match.group(2)
-        question = match.group(3)
+        code = match.group(3)
+        question = match.group(4)
         print("Problem Content:", problem_content)
         print("Problem ID:", problem_id)
+        print("Source code:", code)
         print("Question:", question)
-        return {"problem": problem_content, "question": question}
+        return {"problem": problem_content, "question": question, "source_code": code}
     else:
         return {"problem": "", "question": ""}
-   
+  
+def get_question(state: AgentState):
+   if not state["question"]:
+      return {"question": "What is the solution to this problem?"}
+   return {"question": state["question"]}
+
 async def acall_model(state: AgentState, config: RunnableConfig):
     problem = state["problem"]
     question = state["question"]
     
-    print(f"======== {question} ==========")
+    print(f"======== {question, prompt} ==========")
     model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     # model = ChatOllama(model="codeqwen", base_url=OLLAMA_HOST)
     print(f"------- CALL MODEL ----------")
@@ -226,10 +240,173 @@ async def summarize_conversation(state: AgentState, config: RunnableConfig):
     # I will delete all but the last two messages, but you can change this
     delete_messages = [RemoveMessage(id=m.id) for m in state["messages"][:-4]]
     return {"summary": response.content, "messages": delete_messages}
-  
+
+async def llama_guard_input(state: AgentState, config: RunnableConfig) -> AgentState:
+    llama_guard = LlamaGuard()
+    safety_output = await llama_guard.ainvoke("User", state["messages"])
+    return {"safety": safety_output}
+
+# async def llama_guard_output(state: AgentState, config: RunnableConfig) -> AgentState:
+#     # Simple keyword-based check for obviously irrelevant content
+#     message_content = state["question"]
+    
+#     # List of clearly non-programming topics
+#     irrelevant_keywords = [
+#         "weather", "cooking", "recipe", "politics", "sports", "music", "movie", 
+#         "restaurant", "travel", "fashion", "health", "medicine", "dating", 
+#         "relationship", "news", "celebrity", "gossip", "shopping", "food",
+#         "car", "vehicle", "real estate", "investment", "stock market", "sleep"
+#     ]
+    
+#     # Check if message contains clearly irrelevant keywords
+#     is_clearly_irrelevant = any(keyword in message_content for keyword in irrelevant_keywords)
+    
+#     if is_clearly_irrelevant and not any(prog_word in message_content for prog_word in 
+#                                         ["code", "program", "algorithm", "software", "app", "tech", "computer"]):
+#         # Only block if it's clearly irrelevant AND doesn't contain any programming context
+#         guard_output = LlamaGuardOutput(
+#             safety_assessment=SafetyAssessment.UNSAFE,
+#             unsafe_response="I'd love to chat, but I'm here to help with programming and computer science topics! Got any coding questions I can help with?"
+#         )
+#         return {"is_relevant": guard_output}
+#     else:
+#         # Let everything else pass through (be more permissive)
+#         guard_output = LlamaGuardOutput(
+#             safety_assessment=SafetyAssessment.SAFE,
+#             unsafe_response=""
+#         )
+#         return {"is_relevant": guard_output}
+async def llama_guard_output(state: AgentState, config: RunnableConfig) -> AgentState:
+    # llama_guard = LlamaGuard()
+    # safety_output = await llama_guard.ainvoke("User", state["messages"])
+    # return {"output_safety": safety_output}
+    checking_template = """You are an expert at determining whether an input is relevant to programming or casual conversation that should be allowed in a programming-focused chatbot.
+
+Analyze the 'Latest User Input' based on the 'Conversation Summary' and 'Recent Conversation History' to understand the context.
+
+Conversation Summary:
+{summary}
+
+Recent Conversation History:
+{conversation_history}
+
+Latest User Input: {question}
+
+    Your task is to:
+    1. Analyze the input carefully
+    2. Determine if it's relevant to programming topics OR is appropriate casual conversation
+    3. Provide a clear response
+
+    For each input, respond with:
+    - FIRST LINE: Either "relevant" or "irrelevant" (lowercase, no additional words)
+    - SECOND LINE: A brief explanation of your decision, respond friendly and advise user back to programming topics, start with "Sorry, but..." if the input is irrelevant
+
+    Classify as RELEVANT:
+    - Programming languages and their features
+    - Algorithms and data structures
+    - Software development practices
+    - Computer science concepts
+    - Coding problems and their solutions
+    - System design and architecture
+    - Development tools and environments
+    - Questions about programming courses or learning resources
+    - Greetings and casual conversation starters (like "Hi", "How are you?", "Good morning")
+    - Follow-up questions that might appear irrelevant in isolation but are likely part of a programming conversation
+    - Questions about career advice in programming/software development
+    - Any ambiguous question that could reasonably relate to programming
+
+    Examples:
+    Input: "How do I implement a binary search in Python?"
+    Output:
+    relevant
+    This question directly relates to implementing an algorithm in a programming language.
+
+    Input: "Hi, who are you?"
+    Output:
+    relevant
+    This is a casual greeting that is appropriate for a programming-focused chatbot.
+
+    Input: "Can you introduce yourself?"
+    Output:
+    relevant
+    This is a casual conversation that is appropriate for a programming-focused chatbot.
+
+    Input: "Hi there! Can you help me with some coding questions?"
+    Output:
+    relevant
+    This is a greeting and conversation starter appropriate for a programming-focused chatbot.
+
+    Input: "What's the best recipe for chocolate chip cookies?"
+    Output:
+    irrelevant
+    This question is about cooking/baking and has no connection to programming.
+
+    Input: "Can you recommend some resources for learning React?"
+    Output:
+    relevant
+    This question is about learning resources for a programming framework.
+
+    Input: "What do you think about politics today?"
+    Output:
+    irrelevant
+    This question is about politics and not related to programming."""
+    
+    prompt = ChatPromptTemplate.from_template(checking_template)
+    model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
+    checking_output = prompt | model
+    messages = state["messages"]
+    summary = state.get("summary", "No summary yet.")
+    conversation_history = "\n\n".join(
+        [
+            f"Human: {m.content}" if isinstance(m, HumanMessage) else f"AI: {m.content}"
+            for m in messages
+        ]
+    )
+    question = state["question"]
+    response = await checking_output.ainvoke({
+        "summary": summary,
+        "conversation_history": conversation_history,
+        "question": question
+    })
+    llama_guard = parse_llama_guard_relevant_topic(response.content)
+    return {"is_relevant": llama_guard}
+    
+async def block_unsafe_content(state: AgentState, config: RunnableConfig) -> AgentState:
+    safety: LlamaGuardOutput = state["safety"]
+    return {"messages": [format_safety_message(safety)]}
+
+async def block_irrelevant_content(state: AgentState, config: RunnableConfig) -> AgentState:
+    safety: LlamaGuardOutput = state["is_relevant"]
+    return {"messages": [format_is_relevant_message(safety)]}
+
+
+# Check for unsafe input and block further processing if found
+def check_is_relevant(state: AgentState) -> Literal["relevant", "irrelevant"]:
+    is_relevant: LlamaGuardOutput = state["is_relevant"]
+    match is_relevant.safety_assessment:
+        case SafetyAssessment.UNSAFE:
+            return "irrelevant"
+        case _:
+            return "relevant"
+
+# Check for unsafe input and block further processing if found
+def check_safety(state: AgentState) -> Literal["unsafe", "safe"]:
+    safety: LlamaGuardOutput = state["safety"]
+    match safety.safety_assessment:
+        case SafetyAssessment.UNSAFE:
+            return "unsafe"
+        case _:
+            return "safe"
+
+
 # Define the graph
 agent = StateGraph(MessagesState)
 agent.add_node("model", acall_model)
+agent.add_node("guard_input", llama_guard_input)
+agent.add_node("guard_output", llama_guard_output)
+agent.add_node("block_unsafe_content", block_unsafe_content)
+agent.add_node("block_unsafe_output_content", block_irrelevant_content)
+agent.add_node("get_question", get_question)
 agent.add_node("solver", solver)
 agent.add_node("reviewer", reviewer)
 agent.add_node("extract", extract_message)
@@ -237,7 +414,20 @@ agent.add_node(summarize_conversation)
 agent.set_entry_point("extract")
 
 agent.add_conditional_edges(
+    "guard_input", check_safety, {"unsafe": "block_unsafe_content", "safe": "guard_output"}
+)
+
+agent.add_conditional_edges(
+    "guard_output", check_is_relevant, {"irrelevant": "block_unsafe_output_content", "relevant": "get_question" }
+)
+
+agent.add_edge(
   "extract",
+  "guard_input"
+)
+
+agent.add_conditional_edges(
+  "get_question",
   route_query
 )
 

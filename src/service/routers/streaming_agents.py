@@ -62,7 +62,8 @@ GLOBAL_CHATBOT = "global_chatbot"
 PROBLEM_CHATBOT = "problem_chatbot"
 LESSON_CHATBOT = "lesson_chatbot"
 
-LIST_HIGH_COST_MODELS = ["claude-3-haiku", "bedrock-3.5-haiku", "gpt-4o-mini"]
+# LIST_HIGH_COST_MODELS = ["claude-3-haiku", "bedrock-3.5-haiku", "gpt-4o-mini"]
+LIST_HIGH_COST_MODELS = []
 
 def max_usage_problem_chatbot_per_plan(argument):
     switcher = {
@@ -105,29 +106,35 @@ async def message_generator(
         yield f"data: {json.dumps({'type': 'error', 'content': 'User does not have permission to access this agent. Please upgrade to premium plan.'})}\n\n"
         return
     
-    # check quote if user is using free or course plan
-    try:
-        current_usage_dict =  await get_current_usage(user_input.user_id, subscription_plan)
-        remaining_usage = current_usage_dict["remaining_usage"]
-    except Exception as e:
-        print(f"Error: {e}")
-        remaining_usage = max_usage_problem_chatbot_per_plan(subscription_plan)
+    # check quote if user is using free or course plan - only for problem chatbot
+    remaining_usage = 0
+    if agent_id == PROBLEM_CHATBOT:
+        try:
+            current_usage_dict =  await get_current_usage(user_input.user_id, subscription_plan)
+            remaining_usage = current_usage_dict["remaining_usage"]
+            is_unlimited_usage_problem_chatbot = current_usage_dict["unlimited"]
+        except Exception as e:
+            print(f"Error: {e}")
+            remaining_usage = max_usage_problem_chatbot_per_plan(subscription_plan)
 
-    if (subscription_plan == FREE_PLAN or subscription_plan==COURSE_PLAN) and agent_id==PROBLEM_CHATBOT and remaining_usage <= 0:
-        yield f"data: {json.dumps({'type': 'error', 'content': 'Usage limit exceeded for today. Please upgrade your plan or try on next day.'})}\n\n"
-        return
+        if (subscription_plan == FREE_PLAN or subscription_plan==COURSE_PLAN) and remaining_usage <= 0 and not is_unlimited_usage_problem_chatbot:
+            yield f"data: {json.dumps({'type': 'error', 'content': 'Usage limit exceeded for today. Please upgrade your plan or try on next day.'})}\n\n"
+            return
     
+    # check quote if user is using free or course plan - only for lesson chatbot
+    remaining_usage_of_lesson_chatbot = 0
+    if agent_id == LESSON_CHATBOT:
+        try:
+            current_usage_of_lesson_chatbot_dict =  await get_current_usage_of_lesson_chatbot(user_input.user_id, subscription_plan)
+            remaining_usage_of_lesson_chatbot = current_usage_of_lesson_chatbot_dict["remaining_usage"]
+            is_unlimited_usage_lesson_chatbot = current_usage_of_lesson_chatbot_dict["unlimited"]
+        except Exception as e:
+            print(f"Error: {e}")
+            remaining_usage_of_lesson_chatbot = max_usage_lesson_chatbot_per_plan(subscription_plan)
 
-    try:
-        current_usage_of_lesson_chatbot_dict =  await get_current_usage_of_lesson_chatbot(user_input.user_id, subscription_plan)
-        remaining_usage_of_lesson_chatbot = current_usage_of_lesson_chatbot_dict["remaining_usage"]
-    except Exception as e:
-        print(f"Error: {e}")
-        remaining_usage_of_lesson_chatbot = max_usage_lesson_chatbot_per_plan(subscription_plan)
-
-    if (subscription_plan == FREE_PLAN or subscription_plan==PROBLEM_CHATBOT) and agent_id==LESSON_CHATBOT and remaining_usage_of_lesson_chatbot <= 0:
-        yield f"data: {json.dumps({'type': 'error', 'content': 'Usage limit exceeded for today. Please upgrade your plan or try on next day.'})}\n\n"
-        return
+        if (subscription_plan == FREE_PLAN or subscription_plan==PROBLEM_CHATBOT) and remaining_usage_of_lesson_chatbot <= 0 and not is_unlimited_usage_lesson_chatbot:
+            yield f"data: {json.dumps({'type': 'error', 'content': 'Usage limit exceeded for today. Please upgrade your plan or try on next day.'})}\n\n"
+            return
     
     if agent_id == "title_generator":
         fake_thread_id = uuid4()
@@ -226,7 +233,7 @@ async def message_generator(
             and metadata_dict["langgraph_node"] != "guard_output"
         ):
             
-            print(event)
+            # print(event)
             # print(f"=============== METADATA {metadata_dict['langgraph_node']} =================")
             content = remove_tool_calls(event["data"]["chunk"].content)
             if content:

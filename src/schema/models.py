@@ -28,6 +28,9 @@ class OpenAIModelName(StrEnum):
     LEARNLM_15_PRO = "learnlm-1.5-pro"
     DEEPHERMES_3 = "deep-hermes-3"
     GEMINI_25_PRO = "gemini-2.5-pro"
+    GEMINI_25_FLASH = "gemini-2.5-flash"
+    GEMINI_20_FLASH = "gemini-2.0-flash"
+    GEMINI_25_FLASH_THINKING = "gemini-2.5-flash:thinking"
     GPT_4O_MINI = "gpt-4o-mini"
     GPT_4O = "gpt-4o"
     ChatGPT_4O = "chatgpt-4o"
@@ -36,6 +39,12 @@ class OpenAIModelName(StrEnum):
     LLAMA_GUARD_3_8B = "llama-guard-3-8b"
     DEEPSEEK_R1_7B = "deepseek-r1:7b"
     DEEPSEEK_R1_8B = "deepseek-r1:8b"
+    QWEN3_14B = "qwen3-14b"
+    DEEPCODER = "deepcoder"
+    DEVSTRAL = "devstral"
+    CLAUDE_35_HAIKU = "claude-3.5-haiku"
+    DEEPSEEK_V3 = "deepseek-v3"
+    LLAMA_70B = "llama-70b"
 
 
 
@@ -43,7 +52,7 @@ class AnthropicModelName(StrEnum):
     """https://docs.anthropic.com/en/docs/about-claude/models#model-names"""
 
     HAIKU_3 = "claude-3-haiku"
-    HAIKU_35 = "claude-3.5-haiku"
+    # HAIKU_35 = "claude-3.5-haiku"
     SONNET_35 = "claude-3.5-sonnet"
 
 

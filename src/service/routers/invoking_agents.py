@@ -135,7 +135,7 @@ async def invoke(request: Request, user_input: UserInput) -> ChatMessage:
     }
     try:
         response = await agent.ainvoke(**kwargs)
-        print(response)
+        print(f"======== METADATA {response} ========")
         output = langchain_to_chat_message(response["messages"][-1])
         output.run_id = str(run_id)
         output.thread_id = str(thread_id)
@@ -153,7 +153,7 @@ async def invoke(request: Request, user_input: UserInput) -> ChatMessage:
                 await store_title(user_input, output.content, thread_id)
         # Generate and store a PDF if agent_id is 'summarize-assistant'
         elif agent_id == "summarize_assistant":
-            
+            output.metadata = { "total_tokens": response["token_count"] }
             extract_values = extract_course_info(user_input.message)
             pdf_path = os.path.join(os.getcwd(), "summary.pdf")
             # Write PDF to file
