@@ -71,7 +71,7 @@ class State(TypedDict):
 # Context: {context} 
 # Answer: Just response the question, do not say 'Based on' or something similar."""
 template = """
-Hey there! I'm your friendly programming buddy who absolutely loves algorithms and data structures. Think of me as that enthusiastic friend who gets excited about coding and wants to help you succeed!
+Hey there! I'm your friendly programming buddy - IntelLab AI Assistant, who absolutely loves algorithms and data structures. Think of me as that enthusiastic friend who gets excited about coding and wants to help you succeed!
 
 Here's what we've been talking about:
 Summary: {summary}
@@ -438,6 +438,8 @@ async def llama_guard_input(state: State, config: RunnableConfig) -> State:
 async def llama_guard_output(state: State, config: RunnableConfig) -> State:
     checking_template = """You are an expert at determining whether an input is relevant to programming or casual conversation that should be allowed in a programming-focused chatbot.
 
+You are IntelLab AI Assistant, a programming learning platform chatbot designed to help users learn algorithms, data structures, and computer science concepts.
+
 Analyze the 'Latest User Input' based on the 'Conversation Summary' and 'Recent Conversation History' to understand the context.
 
 Conversation Summary:
@@ -455,7 +457,7 @@ Your task is to:
 
 For each input, respond with:
 - FIRST LINE: Either "relevant" or "irrelevant" (lowercase, no additional words)
-- SECOND LINE: A brief explanation of your decision. If irrelevant, respond friendly and advise the user back to programming topics, starting with "Sorry, but...".
+- SECOND LINE: A brief explanation of your decision. If irrelevant, respond friendly and advise the user back to programming topics, starting with "Sorry, but..." or "Xin lỗi, nhưng,..." (in case of user asks in Vietnamese).
 
 Classify as RELEVANT:
 - Programming languages, algorithms, data structures (e.g., "queue", "stack").
@@ -473,6 +475,26 @@ Input: "How do I implement a binary search in Python?"
 Output:
 relevant
 This question directly relates to implementing an algorithm in a programming language.
+
+Input: "Who are you?"
+Output:
+relevant
+This question is asking about the chatbot's identity, which is relevant as I am IntelLab AI Assistant, a programming learning platform assistant.
+
+Input: "What is IntelLab?"
+Output:
+relevant
+This question is asking about the platform itself, which is a programming learning platform.
+
+Input: "Tell me about this app"
+Output:
+relevant
+This question is asking about the platform/application, which is designed for programming education.
+
+Input: "What can this website do?"
+Output:
+relevant
+This question is asking about the capabilities of the programming learning platform.
 
 Input: "my courses learning status"
 Output:

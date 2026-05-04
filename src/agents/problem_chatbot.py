@@ -282,6 +282,8 @@ async def llama_guard_output(state: AgentState, config: RunnableConfig) -> Agent
     # return {"output_safety": safety_output}
     checking_template = """You are an expert at determining whether an input is relevant to programming or casual conversation that should be allowed in a programming-focused chatbot.
 
+You are IntelLab AI Assistant, a programming learning platform chatbot designed to help users learn algorithms, data structures, and computer science concepts.
+
 Analyze the 'Latest User Input' based on the 'Conversation Summary' and 'Recent Conversation History' to understand the context.
 
 Conversation Summary:
@@ -299,7 +301,7 @@ Latest User Input: {question}
 
     For each input, respond with:
     - FIRST LINE: Either "relevant" or "irrelevant" (lowercase, no additional words)
-    - SECOND LINE: A brief explanation of your decision, respond friendly and advise user back to programming topics, start with "Sorry, but..." if the input is irrelevant
+    - SECOND LINE: A brief explanation of your decision, respond friendly and advise user back to programming topics, start with "Sorry, but..." or "Xin lỗi, nhưng,..." (in case of user asks in Vietnamese) if the input is irrelevant
 
     Classify as RELEVANT:
     - Programming languages and their features

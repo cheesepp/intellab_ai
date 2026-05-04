@@ -35,7 +35,7 @@ _MODEL_TABLE = {
     OpenAIModelName.ChatGPT_4O: "openai/chatgpt-4o-latest",
     OpenAIModelName.GEMINI_25_PRO: "google/gemini-2.5-pro-preview",
     OpenAIModelName.GEMINI_25_FLASH_THINKING: "google/gemini-2.5-flash-preview-05-20:thinking",
-    OpenAIModelName.GEMINI_25_FLASH: "google/gemini-2.5-flash-preview-05-20",
+    OpenAIModelName.GEMINI_25_FLASH: "google/gemini-2.5-flash",
     OpenAIModelName.GEMINI_20_FLASH: "google/gemini-2.0-flash-exp:free",
     OpenAIModelName.LLAMA_GUARD_3_8B: "meta-llama/llama-guard-2-8b",
     OpenAIModelName.LLAMA_GUARD_4_12B: "meta-llama/llama-guard-4-12b",

@@ -68,6 +68,7 @@ class State(TypedDict):
     lesson: str
     lesson_name: str
     question: str
+    is_chatbot: bool
 
 # template = """
 # You are an Expert Educational Content Interpreter specializing in explaining lesson materials. Your primary role is to provide clear, precise explanations of specific sentences or concepts from lesson content that users ask about.
@@ -116,9 +117,34 @@ RESPONSE GUIDELINES:
 13. Present all information in plain text format only - do not use tables or code blocks
 When responding, identify the specific sentence/concept and provide a concise explanation that places it within the broader context of the lesson material."""
 
+chatbot_template = """
+You are an Expert Educational Content Interpreter specializing in explaining lesson materials. Your primary role is to provide clear, precise explanations of specific sentences or concepts from lesson content that users ask about.
+
+CONTEXT
+Lesson Content: {lesson_content}
+Current discussion: {conversation}
+
+USER QUERY
+The user is asking about: "{question}"
+
+RESPONSE GUIDELINES:
+1. Focus specifically on explaining the sentence or concept the user is asking about
+2. Connect the explanation directly to the broader lesson content provided in the context
+3. Provide precise definitions of technical terms appearing in the sentence
+4. Explain how this specific concept fits within the larger framework of the lesson
+5. Use clear, concise language appropriate for educational settings
+6. Include relevant examples from the lesson content when helpful
+7. Maintain professional academic tone throughout your response
+8. Answer directly without meta-references to "the context" or "the materials"
+9. Be concise and focused on the core question - avoid lengthy explanations
+10. Don't start responses with phrases like "Here...", "Because user has asked...", "According to the lesson context,...", or "The specific concept being asked about is:..."
+11. If question is outside the lesson scope, immediately state it's beyond scope and invite questions related to the lesson
+When responding, identify the specific sentence/concept and provide a concise explanation that places it within the broader context of the lesson material."""
+
 embeddings = create_embeddings()
 # Create an index using the loaded documents
 prompt = ChatPromptTemplate.from_template(template)
+chatbot_prompt = ChatPromptTemplate.from_template(chatbot_template)
 
 def format_is_relevant_message(safety: LlamaGuardOutput) -> AIMessage:
     content = (
@@ -149,7 +175,7 @@ async def llama_guard_output(state: State, config: RunnableConfig) -> State:
 
     For each input, respond with:
     - FIRST LINE: Either "relevant" or "irrelevant" (lowercase, no additional words)
-    - SECOND LINE: A brief explanation of your decision, respond friendly and advise user back to programming topics, start with "Sorry, but..." if the input is irrelevant
+    - SECOND LINE: A brief explanation of your decision, respond friendly and advise user back to programming topics, start with "Sorry, but..." or "Xin lỗi, nhưng,..." (in case of user asks in Vietnamese) if the input is irrelevant
 
     Classify as RELEVANT:
     - Programming languages and their features
@@ -236,19 +262,20 @@ def check_is_relevant(state: State) -> Literal["relevant", "irrelevant"]:
         
 def extract_message(state: State):
     message = state["messages"][-1].content
-    print (f"========= GO {message} ============")
-    pattern = r"Lesson:\s*(.*?)\s*Lesson_id:\s*(\S+)\s*Question:\s*(.+)"
+    # print (f"========= GO {message} ============")
+    pattern = r"Lesson:\s*(.*?)\s*Lesson_id:\s*(\S+)\s*Question:\s*(.+)\s*Chatbot:\s*(true|false)"
 
     match = re.search(pattern, message, re.DOTALL)
-    print (f"========= MATCH {match} ============")
+    # print (f"========= MATCH {match} ============")
     if match:
         lesson_name = match.group(1)
         lesson_id = match.group(2)
         question = match.group(3)
-        print("Lesson Name:", lesson_name)
+        chatbot = match.group(4).lower() == "true"
+        # print("Lesson Name:", lesson_name)
         print("Lesson ID:", lesson_id)
         print("Question:", question)
-        return {"lesson_name": lesson_name, "question": question}
+        return {"lesson_name": lesson_name, "question": question, "is_chatbot": chatbot}
     else:
         return {"lesson_name": "", "question": ""}
 
@@ -260,17 +287,21 @@ def retrieve(state: State):
     # return {"lesson": docs[0].page_content if len(docs) > 0 else ""}
     return {"lesson": state["lesson_name"]}
 
+def is_chatbot(state: State) -> Literal["chatbot", "explainer"]:
+    is_chatbot = state["is_chatbot"]
+    """Determine if the conversation is a chatbot or an explainer."""
+    return "chatbot" if is_chatbot else "explainer"
 
 # Define the logic to call the model
 async def acall_model(state: State, config: RunnableConfig):
     lesson = state["lesson"]
     question = state["question"]
     
-    print(f"======== {lesson} ==========")
+    # print(f"======== {lesson} ==========")
     model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    model.max_tokens = 100
+    # model.max_tokens = 100
     # model = ChatOllama(model="codeqwen", base_url=OLLAMA_HOST)
-    print(f"------- CALL MODEL ----------")
+    print(f"------- CALL EXPLAINER ----------")
     # If a summary exists, we add this in as a system message
     summary = state.get("summary", "")
     if summary:
@@ -284,6 +315,31 @@ async def acall_model(state: State, config: RunnableConfig):
         "lesson_content": RunnableLambda(lambda _: lesson),
         "question": RunnableLambda(lambda _: question),
       } | prompt | model
+    response = await normal_chatbot.ainvoke(messages)
+    return {"messages": [response]}
+
+async def acall_chatbot(state: State, config: RunnableConfig):
+    lesson = state["lesson"]
+    question = state["question"]
+    
+    # print(f"======== {lesson} ==========")
+    model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
+    # model.max_tokens = 100
+    # model = ChatOllama(model="codeqwen", base_url=OLLAMA_HOST)
+    print(f"------- CALL CHATBOT ----------")
+    # If a summary exists, we add this in as a system message
+    summary = state.get("summary", "")
+    if summary:
+        system_message = f"Summary of conversation earlier: {summary}"
+        messages = [SystemMessage(content=system_message)] + state["messages"]
+    else:
+        messages = state["messages"]
+    m_as_string = "\n\n".join([message.content for message in messages])
+    normal_chatbot = {
+        "conversation": RunnableLambda(lambda _: m_as_string),
+        "lesson_content": RunnableLambda(lambda _: lesson),
+        "question": RunnableLambda(lambda _: question),
+      } | chatbot_prompt | model
     response = await normal_chatbot.ainvoke(messages)
     return {"messages": [response]}
 
@@ -327,6 +383,7 @@ agent = StateGraph(State)
 agent.add_node("extract", extract_message)
 agent.add_node("retrieve", retrieve)
 agent.add_node("model", acall_model)
+agent.add_node("chatbot", acall_chatbot)
 agent.add_node("guard_output", llama_guard_output)
 agent.add_node(summarize_conversation)
 agent.set_entry_point("extract")
@@ -336,9 +393,14 @@ agent.add_conditional_edges(
     "guard_output", check_is_relevant, {"irrelevant": "block_irrelevant_content", "relevant": "retrieve" }
 )
 
+agent.add_conditional_edges(
+    "retrieve", is_chatbot, {"explainer": "model", "chatbot": "chatbot" }
+)
+
 agent.add_edge("extract", "guard_output")
 agent.add_edge("retrieve", "model")
 agent.add_edge("model", "summarize_conversation")
+agent.add_edge("chatbot", "summarize_conversation")
 agent.add_edge("summarize_conversation", END)
 
 

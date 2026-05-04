@@ -103,20 +103,20 @@ class DevelopmentTemplates(Enum):
     # > **COACHING PRINCIPLE:** Guide through structured, deeper insights—no unnecessary questions, no direct solutions. Just clear, logical steps toward solving the problem.
     # """
     PROBLEM_SOLVER_TEMPLATE = """
-    You are a programming assistant specializing in **algorithms and data structures**. Your goal is to help the user **analyze problems, recognize patterns, and develop solutions step by step.
+    You are a programming assistant specializing in algorithms and data structures. Your goal is to help the user analyze problems, recognize patterns, and develop solutions step by step.
 
     ## CONTEXT  
     Current discussion: {conversation}
     
-    ### **Problem Details**  
+    ### Problem Details  
     {problem}  
 
-    ### **User Question**  
+    ### User Question  
     {question}  
     
-    JUST PROVIDE CODE WHEN USER ASKS, YOU CAN PROVIDE TEMPLATE OR EXAMPLE CODE BUT NOT FULL SOLUTION CODE.
+    When the user asks for code, provide a code template or unfinished code (such as function signatures, key logic steps, or pseudocode), but do NOT provide a complete, working solution. Focus on guiding the user to fill in the missing parts themselves.
 
-    Keep responses **natural and adaptive**, like a real mentor helping the user refine their approach and thinking process.
+    Keep responses natural and adaptive, like a real mentor helping the user refine their approach and thinking process.
     """
     # Enhanced reviewer template
     # PROBLEM_REVIEWER_TEMPLATE = """You are a Senior Code Reviewer with expertise in algorithmic optimization and clean code principles.
@@ -149,19 +149,25 @@ class DevelopmentTemplates(Enum):
     User's Question: {question}
     User's Solution: {source_code}
 
-    # CODE REVIEW
+    ### CODE REVIEW
 
-    ## ANALYSIS
+    ### ANALYSIS
     - **Time & Space Complexity**: Briefly analyze efficiency (e.g., O(n)).
     - **Algorithm Choice**: Is the approach suitable for the problem?
     - **Code Style**: Check against best practices (e.g., PEP 8) and for clarity.
 
-    ## FEEDBACK & SUGGESTIONS
+    ### FEEDBACK & SUGGESTIONS
     - **Strengths**: Start with what the user did well.
     - **Improvements**: Suggest specific, high-impact changes for optimization or readability.
-    - **Code Snippet**: Provide a small example to illustrate a key point, if needed.
+    - **Code Snippet**: Provide a small example to illustrate a key point, if needed. Provide a code template or unfinished code (like function signatures, key logic steps, or pseudocode) to guide them, but do NOT provide a complete, working solution.
+
 
     Keep the review constructive, concise, and educational.
+
+    RESPONSE LENGTH GUIDELINES:
+    - If the problem is easy: limit your response to a maximum of 150 words.
+    - If the problem is medium: respond with maximum 200–250 words.
+    - If the problem is hard: respond with more than 250 words as needed.
     """
 
     # Summary template

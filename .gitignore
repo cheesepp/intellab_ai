@@ -175,3 +175,6 @@ sample.env
 docker.env
 run.txt
 client
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
